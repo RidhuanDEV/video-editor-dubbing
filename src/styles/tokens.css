@@ -1,0 +1,65 @@
+/* Single source of visual tokens (PRD 08 §2–3). Components use semantic tokens only. */
+:root,
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-app: #070c0e;
+  --bg-panel: #0b1215;
+  --bg-surface: #10181b;
+  --bg-raised: #151f23;
+  --bg-timeline: #090f11;
+  --bg-hover: #1d292e;
+  --bg-selected: #12302d;
+  --border-subtle: #1d292e;
+  --border-default: #2a3a41;
+  --text-primary: #e4ebed;
+  --text-secondary: #94a7ad;
+  --text-muted: #7a8f96;
+  --accent: #2dd4bf;
+  --accent-hover: #5eead4;
+  --accent-subtle: #12302d;
+  --on-accent: #042f2e;
+  --focus-ring: #5eead4;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --info: #38bdf8;
+  --playhead: #fb7185;
+  --track-video: #5b9df0;
+  --track-narration: #2dd4bf;
+  --track-bgm: #a78bfa;
+  --track-effects: #fbbf24;
+  --track-subtitle: #f472b6;
+  --shadow-raised: 0 8px 24px rgb(0 0 0 / 0.5);
+}
+
+[data-theme="light"] {
+  color-scheme: light;
+  --bg-app: #eef3f4;
+  --bg-panel: #f6f9f9;
+  --bg-surface: #ffffff;
+  --bg-raised: #ffffff;
+  --bg-timeline: #e6edef;
+  --bg-hover: #e3ecee;
+  --bg-selected: #ccfbf1;
+  --border-subtle: #dce5e8;
+  --border-default: #c3d0d4;
+  --text-primary: #0b1215;
+  --text-secondary: #3c4f57;
+  --text-muted: #5a6e75;
+  --accent: #0f766e;
+  --accent-hover: #115e59;
+  --accent-subtle: #ccfbf1;
+  --on-accent: #ffffff;
+  --focus-ring: #0f766e;
+  --success: #047857;
+  --warning: #b45309;
+  --danger: #b91c1c;
+  --info: #0369a1;
+  --playhead: #e11d48;
+  --track-video: #2563eb;
+  --track-narration: #0f766e;
+  --track-bgm: #6d28d9;
+  --track-effects: #b45309;
+  --track-subtitle: #be185d;
+  --shadow-raised: 0 8px 24px rgb(11 18 21 / 0.16);
+}

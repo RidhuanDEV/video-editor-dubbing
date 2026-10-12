@@ -1,0 +1,42 @@
+[package]
+name = "script-studio"
+version = "0.1.0"
+description = "Script-driven video editor & dubbing studio"
+license = "Apache-2.0"
+edition = "2021"
+rust-version = "1.80"
+
+[lib]
+# `_lib` suffix avoids a name clash with the bin target on Windows (Tauri convention).
+name = "script_studio_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+tauri = { version = "2.12", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
+# native-tls (SChannel / Secure Transport / OpenSSL) avoids the aws-lc-rs C toolchain (cmake/NASM) on Windows.
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "native-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "native-tls"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+async-trait = "0.1"
+sha2 = "0.10"
+hex = "0.4"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+httpdate = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
