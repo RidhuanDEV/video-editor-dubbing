@@ -3,7 +3,9 @@
 Script-driven video editor & dubbing studio: Tauri 2 (Rust) + React 19 + TypeScript strict + Tailwind CSS v4.
 Specs live in `../../docs/desktop-editor-prd/` (PRD 00–09). Licence: Apache-2.0. FFmpeg is an LGPL sidecar (ADR D3).
 
-Status: **Phase 0/1** — scaffold, core contracts, FFmpeg resolver + encoder detection, native Edge-TTS spike.
+Status: **Phase 3** — preview proxies (540p H.264 / AAC, built in the background), proxy-based preview with
+freeze-frame, multi-track timeline (magnetic scene track, trim/split/delete, snapping, mute/solo/lock, BGM).
+Phases 0–2 (engine, project format, media pool, script panel, undo/redo, autosave) are complete.
 
 ## Prerequisites
 
@@ -19,7 +21,9 @@ Status: **Phase 0/1** — scaffold, core contracts, FFmpeg resolver + encoder de
 | `npm run tauri dev` | Run the desktop app (Vite on :1420 + Rust core) |
 | `npm run dev` | UI only in a browser; engine calls show "Engine Rust tidak tersedia" |
 | `npm run typecheck` | `tsc` strict for `src/` and `vite.config.ts` |
+| `npm test` | Vitest unit tests (schemas, commands/undo, chunking, sync status) |
 | `npm run rust:check` / `npm run rust:test` | `cargo check` / `cargo test` for `src-tauri` |
+| `cargo test -- --ignored live_` (in `src-tauri`) | Live checks: real Edge-TTS, real FFmpeg encode/probe on this machine |
 | `npm run tauri build` | Production installer |
 
 ## Layout
@@ -30,16 +34,23 @@ src/
     project.ts  ProjectManifest contract (PRD 02)
     ipc.ts      IPC DTOs mirrored from Rust serde output
     theme.ts    ThemePreference / resolveTheme (PRD 08 §4)
+  project/      manifest (create/load/serialize), commands (undo/redo), store (Zustand),
+                session (open/save/autosave/recovery), chunk, sync, synthesis,
+                timeline (layout/snap), editor (playhead/selection), proxies (background queue)
   lib/ipc.ts    Typed invoke wrapper: every response/rejection validated with Zod
   lib/theme.ts  Theme hook (system/light/dark, Ctrl/Cmd+Shift+L, native title bar sync)
   styles/       tokens.css (PRD 08 tokens) + index.css (Tailwind v4 @theme inline)
-  components/   AppShell (page bar), WorkspacePage, EngineView (diagnostics), ui primitives
+  components/   AppShell, StartScreen, MediaPage, ScriptPage + SceneEditor, EngineView, Dialog, ui
 src-tauri/src/
   ffmpeg/       resolver (custom → bundled → PATH), process (array args, timeout, kill-on-drop),
                 probe (version + LGPL/GPL/nonfree detection), encoder (real test-encode chain)
   tts/          TtsProvider trait, EdgeTtsProvider (native WebSocket, WordBoundary, chunking,
                 clock-skew retry), SHA-256 disk cache (atomic writes)
-  commands.rs   IPC: check_dependencies, detect_encoder, tts_synthesize, tts_list_voices
+  project.rs    .smbproj folder service: atomic writes inside the open project only
+  media.rs      ffprobe metadata, thumbnails, relink by file or folder
+  proxy.rs      preview proxies inside the project (video H.264 540p short GOP, audio AAC)
+  dialog.rs     Native dialogs opened from Rust (the webview never supplies paths to write)
+  commands/     IPC: engine (deps, encoders, TTS), project, media
   error.rs      AppError { kind, message } crossing IPC
 ```
 

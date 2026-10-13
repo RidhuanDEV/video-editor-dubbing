@@ -6,8 +6,10 @@ mod probe;
 mod process;
 mod resolver;
 
-pub use encoder::{detect_encoder, EncoderDetection};
+pub use encoder::{detect_encoder, EncoderDetection, VideoEncoder};
 pub use probe::{check_dependencies, DependencyReport};
+pub(crate) use process::{error_summary, progress_out_ms, run, run_with_progress};
+pub(crate) use resolver::resolve;
 
 use thiserror::Error;
 

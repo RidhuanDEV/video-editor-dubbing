@@ -49,7 +49,7 @@ impl VideoEncoder {
     }
 
     /// Hardware encoders take NV12; libopenh264 only accepts planar YUV 4:2:0.
-    const fn test_pixel_format(self) -> &'static str {
+    pub const fn pixel_format(self) -> &'static str {
         match self {
             VideoEncoder::OpenH264 => "yuv420p",
             _ => "nv12",
@@ -118,7 +118,7 @@ async fn test_encode(ffmpeg: &Path, encoder: VideoEncoder) -> Result<(), FfmpegE
         "-frames:v",
         "1",
         "-pix_fmt",
-        encoder.test_pixel_format(),
+        encoder.pixel_format(),
         "-c:v",
         encoder.ffmpeg_name(),
         "-f",

@@ -1,16 +1,22 @@
 /** Workspace frame: top bar, page content, DaVinci-style page bar at the bottom (PRD 08 §7). */
 import {
   AudioLines,
+  CircleDot,
   Clapperboard,
   Cpu,
+  Lock,
   FileText,
   FolderOpen,
   Monitor,
   Moon,
+  Redo2,
+  Save,
   Scissors,
   Share,
   Sparkles,
   Sun,
+  Undo2,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -49,18 +55,59 @@ interface AppShellProps {
   readonly onNavigate: (view: ViewId) => void;
   readonly theme: ThemeState;
   readonly encoder: VideoEncoderId | null;
+  readonly project: ProjectHeader | null;
   readonly children: ReactNode;
 }
 
-export function AppShell({ view, onNavigate, theme, encoder, children }: AppShellProps) {
+export interface ProjectHeader {
+  readonly title: string;
+  readonly readOnly: boolean;
+  readonly dirty: boolean;
+  readonly undoLabel: string | null;
+  readonly redoLabel: string | null;
+  readonly onUndo: () => void;
+  readonly onRedo: () => void;
+  readonly onSave: () => void;
+  readonly onClose: () => void;
+}
+
+export function AppShell({ view, onNavigate, theme, encoder, project, children }: AppShellProps) {
   return (
     <div className="flex h-full flex-col bg-app text-fg">
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-line-subtle bg-panel px-3">
         <div className="flex items-center gap-2">
           <Clapperboard size={20} strokeWidth={1.75} className="text-accent" aria-hidden />
           <span className="text-[13px] font-semibold">Script Studio</span>
-          <span className="text-[12px] text-fg-muted">— Proyek belum dibuka</span>
+          {project ? (
+            <>
+              <span className="max-w-[320px] truncate text-[13px] text-fg-2" title={project.title}>
+                — {project.title}
+              </span>
+              {project.readOnly ? (
+                <span className="inline-flex items-center gap-1 text-[12px] text-warning">
+                  <Lock size={14} strokeWidth={1.75} aria-hidden /> Baca saja
+                </span>
+              ) : project.dirty ? (
+                <span className="inline-flex items-center gap-1 text-[12px] text-warning">
+                  <CircleDot size={14} strokeWidth={1.75} aria-hidden /> Belum disimpan
+                </span>
+              ) : (
+                <span className="text-[12px] text-fg-muted">Tersimpan</span>
+              )}
+            </>
+          ) : (
+            <span className="text-[12px] text-fg-muted">— Proyek belum dibuka</span>
+          )}
         </div>
+
+        {project && (
+          <div className="flex items-center gap-1" role="group" aria-label="Riwayat dan file">
+            <IconButton icon={Undo2} label={project.undoLabel ? `Undo: ${project.undoLabel} (Ctrl+Z)` : "Tidak ada yang bisa di-undo"} disabled={!project.undoLabel} onClick={project.onUndo} className="disabled:opacity-40" />
+            <IconButton icon={Redo2} label={project.redoLabel ? `Redo: ${project.redoLabel} (Ctrl+Y)` : "Tidak ada yang bisa di-redo"} disabled={!project.redoLabel} onClick={project.onRedo} className="disabled:opacity-40" />
+            <IconButton icon={Save} label="Simpan proyek (Ctrl+S)" disabled={project.readOnly || !project.dirty} onClick={project.onSave} className="disabled:opacity-40" />
+            <IconButton icon={X} label="Tutup proyek" onClick={project.onClose} />
+          </div>
+        )}
 
         <div className="ml-auto flex items-center gap-1" role="group" aria-label="Pilihan tema (Ctrl+Shift+L)">
           {THEME_OPTIONS.map((option) => (

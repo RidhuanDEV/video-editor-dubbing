@@ -110,6 +110,38 @@ export const VoiceInfoSchema = z.object({
 export const VoiceListSchema = z.array(VoiceInfoSchema);
 
 // ---------------------------------------------------------------------------
+// Project & media
+// ---------------------------------------------------------------------------
+
+export const OpenedProjectSchema = z.object({
+  root: z.string().min(1),
+  manifestJson: z.string().nullable(),
+  recoveryJson: z.string().nullable(),
+});
+
+export const ProbedMediaSchema = z.object({
+  id: z.string().min(1),
+  kind: z.enum(["video", "audio", "image"]),
+  filePath: z.string().min(1),
+  fileName: z.string(),
+  durationMs: z.number().int().positive().nullable(),
+  width: z.number().int().positive().nullable(),
+  height: z.number().int().positive().nullable(),
+  fps: z.number().positive().nullable(),
+  thumbnailPath: z.string().nullable(),
+});
+
+export const ImportOutcomeSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("imported"), media: ProbedMediaSchema }),
+  z.object({ status: z.literal("failed"), fileName: z.string(), message: z.string() }),
+]);
+
+export const RelinkCandidateSchema = z.object({
+  media: ProbedMediaSchema,
+  durationMatches: z.boolean(),
+});
+
+// ---------------------------------------------------------------------------
 // Job events: emitted by `src-tauri/src/jobs.rs` for every long-running command
 // ---------------------------------------------------------------------------
 
@@ -117,7 +149,7 @@ export const JOB_EVENT = "job://event";
 
 export const JobEventSchema = z.object({
   jobId: z.uuid(),
-  kind: z.enum(["tts", "encoderDetection"]),
+  kind: z.enum(["tts", "encoderDetection", "mediaImport", "mediaRelink", "mediaProxy"]),
   status: z.enum(["started", "progress", "succeeded", "failed"]),
   message: z.string().nullable(),
 });
@@ -140,3 +172,7 @@ export type WordBoundary = DeepReadonly<z.infer<typeof WordBoundarySchema>>;
 export type TtsResult = DeepReadonly<z.infer<typeof TtsResultSchema>>;
 export type VoiceInfo = DeepReadonly<z.infer<typeof VoiceInfoSchema>>;
 export type JobEvent = DeepReadonly<z.infer<typeof JobEventSchema>>;
+export type OpenedProject = DeepReadonly<z.infer<typeof OpenedProjectSchema>>;
+export type ProbedMedia = DeepReadonly<z.infer<typeof ProbedMediaSchema>>;
+export type ImportOutcome = DeepReadonly<z.infer<typeof ImportOutcomeSchema>>;
+export type RelinkCandidate = DeepReadonly<z.infer<typeof RelinkCandidateSchema>>;

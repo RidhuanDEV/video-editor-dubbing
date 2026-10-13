@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "1.0.0",
+  "id": "6f1c2b9e-4a63-4f0e-9d2a-0c8f5b7e1a24",
+  "title": "Contoh Tutorial SUMBA",
+  "createdAt": "2026-10-12T08:00:00.000Z",
+  "updatedAt": "2026-10-12T08:30:00.000Z",
+  "defaultVoice": { "engine": "edge-tts", "voiceId": "id-ID-GadisNeural", "rate": "+0%", "pitch": "+0Hz", "volume": "+0%" },
+  "canvas": { "width": 1920, "height": 1080, "fps": 30, "background": "#1F2933", "padding": 0, "fit": "contain", "aspectRatio": "16:9" },
+  "assets": [
+    { "id": "8d3f8a2e-1b7c-4c55-9a0e-2f4b6c8d0e11", "kind": "video", "filePath": "D:\\Rekaman\\login.mp4", "durationMs": 12000, "width": 1920, "height": 1080, "fps": 30 }
+  ],
+  "scenes": [
+    {
+      "id": "c1a2b3c4-d5e6-4f70-8a91-b2c3d4e5f607",
+      "order": 0,
+      "title": "Buka halaman login",
+      "narration": "Buka halaman login SUMBA, lalu masukkan email Anda.",
+      "videoClipId": "8d3f8a2e-1b7c-4c55-9a0e-2f4b6c8d0e11",
+      "videoTrimStartMs": 0,
+      "videoTrimEndMs": 4000,
+      "playbackRate": 1,
+      "alignmentMode": "freeze-frame",
+      "effects": [],
+      "audioDurationMs": 4420,
+      "audioCachePath": "cache/tts/7c5e1f0a9b8d2c3e4f5a6b7c8d9e0f1a2b3c4d5e6f708192a3b4c5d6e7f8091a.mp3",
+      "audioSha256": "7c5e1f0a9b8d2c3e4f5a6b7c8d9e0f1a2b3c4d5e6f708192a3b4c5d6e7f8091a"
+    }
+  ],
+  "bgmTracks": [],
+  "subtitleSettings": { "enabled": true, "fontName": "Inter", "fontSize": 42, "primaryColor": "#FFFFFF", "highlightColor": "#F5A800", "backColor": "#000000A0", "maxCharsPerChunk": 80 },
+  "markers": [],
+  "tracks": [
+    { "kind": "video", "muted": false, "solo": false, "locked": false },
+    { "kind": "narration", "muted": false, "solo": false, "locked": false },
+    { "kind": "bgm", "muted": false, "solo": false, "locked": false },
+    { "kind": "effects", "muted": false, "solo": false, "locked": false },
+    { "kind": "subtitle", "muted": false, "solo": false, "locked": false }
+  ],
+  "sceneGapMs": 300,
+  "loudness": { "enabled": true, "targetLufs": -14 }
+}

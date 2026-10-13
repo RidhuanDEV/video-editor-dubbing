@@ -22,7 +22,7 @@ pub enum FfmpegLicense {
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[serde(tag = "status", rename_all = "camelCase")]
+#[serde(tag = "status", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum ToolStatus {
     Found { path: PathBuf, source: BinarySource, version: String, license: FfmpegLicense },
     Missing { reason: String },

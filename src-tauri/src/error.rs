@@ -4,6 +4,8 @@
 use serde::Serialize;
 
 use crate::ffmpeg::FfmpegError;
+use crate::media::MediaError;
+use crate::project::ProjectError;
 use crate::tts::TtsError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -53,5 +55,27 @@ impl From<FfmpegError> for AppError {
             FfmpegError::Spawn(_) | FfmpegError::Failed(_) => ErrorKind::Process,
         };
         Self::new(kind, err.to_string())
+    }
+}
+
+impl From<ProjectError> for AppError {
+    fn from(err: ProjectError) -> Self {
+        let kind = match &err {
+            ProjectError::Io(_) => ErrorKind::Io,
+            ProjectError::NotOpen | ProjectError::AlreadyExists(_) | ProjectError::NotAProject(_) | ProjectError::TooLarge(_) => {
+                ErrorKind::InvalidRequest
+            }
+        };
+        Self::new(kind, err.to_string())
+    }
+}
+
+impl From<MediaError> for AppError {
+    fn from(err: MediaError) -> Self {
+        match err {
+            MediaError::Ffmpeg(inner) => inner.into(),
+            MediaError::Unsupported(_) => Self::new(ErrorKind::InvalidRequest, err.to_string()),
+            MediaError::BadProbe(_) => Self::new(ErrorKind::Process, err.to_string()),
+        }
     }
 }

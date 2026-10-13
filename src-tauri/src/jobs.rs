@@ -13,6 +13,9 @@ pub const JOB_EVENT: &str = "job://event";
 pub enum JobKind {
     Tts,
     EncoderDetection,
+    MediaImport,
+    MediaRelink,
+    MediaProxy,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
