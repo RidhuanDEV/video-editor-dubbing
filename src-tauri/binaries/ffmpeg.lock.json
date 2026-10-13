@@ -1,0 +1,19 @@
+{
+  "version": "8.1.3-46d899d",
+  "license": "LGPL-3.0-or-later",
+  "release": "https://github.com/RidhuanDEV/video-editor-dubbing/releases/download/ffmpeg-8.1-lgpl",
+  "targets": {
+    "x86_64-pc-windows-msvc": {
+      "archive": "ffmpeg-8.1.3-46d899d-win64-lgpl.zip",
+      "sha256": "03a86ada3d4fa14f28ac365f03866ab9ba68587442c172d4f5c6088f431c36c2",
+      "binDir": "ffmpeg-n8.1-latest-win64-lgpl-8.1/bin",
+      "exeSuffix": ".exe"
+    },
+    "x86_64-unknown-linux-gnu": {
+      "archive": "ffmpeg-8.1.3-46d899d-linux64-lgpl.tar.xz",
+      "sha256": "968e3a2d1c36b98e7a99e755d5fc61997e83ef864f8fe0d57d280bc20ca4c777",
+      "binDir": "ffmpeg-n8.1-latest-linux64-lgpl-8.1/bin",
+      "exeSuffix": ""
+    }
+  }
+}

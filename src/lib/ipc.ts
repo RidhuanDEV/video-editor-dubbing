@@ -19,6 +19,7 @@ import {
   type EncoderDetection,
   type ImportOutcome,
   type OpenedProject,
+  type PresetId,
   type RelinkCandidate,
   type TtsResult,
   type TtsSynthesizeRequest,
@@ -138,4 +139,25 @@ export function mediaBuildProxy(
 
 export function ttsWordBoundaries(sha256s: ReadonlyArray<string>): Promise<IpcResult<Readonly<Record<string, ReadonlyArray<WordBoundary>>>>> {
   return call("tts_word_boundaries", z.record(z.string(), z.array(WordBoundarySchema)), { sha256s });
+}
+
+// ---------------------------------------------------------------------------
+// Export (output path comes from a save dialog opened by Rust)
+// ---------------------------------------------------------------------------
+
+export interface ExportRequest {
+  readonly manifestJson: string;
+  readonly title: string;
+  readonly preset: PresetId;
+  readonly overlayAss: string | null;
+  readonly srt: string | null;
+}
+
+/** `null` value = the user cancelled the save dialog. */
+export function exportStart(jobId: string, request: ExportRequest): Promise<IpcResult<string | null>> {
+  return call("export_start", z.string().nullable(), { jobId, request });
+}
+
+export function exportCancel(jobId: string): Promise<IpcResult<boolean>> {
+  return call("export_cancel", z.boolean(), { jobId });
 }

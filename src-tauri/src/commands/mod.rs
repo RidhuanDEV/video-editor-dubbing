@@ -2,12 +2,14 @@
 //! every failure crosses the boundary as a typed `AppError`.
 
 pub mod engine;
+pub mod export;
 pub mod media;
 pub mod project;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
+use tokio::sync::{watch, Mutex};
 
 use crate::error::{AppError, ErrorKind};
 use crate::ffmpeg::{self, VideoEncoder};
@@ -20,11 +22,13 @@ pub struct AppState {
     /// Last detected encoder. An async mutex so concurrent proxy jobs wait for one detection
     /// instead of each running its own round of test encodes.
     pub encoder: Mutex<Option<VideoEncoder>>,
+    /// Cancel handles of running exports, by job id.
+    pub exports: std::sync::Mutex<HashMap<String, watch::Sender<bool>>>,
 }
 
 impl AppState {
     pub fn new(tts: Arc<dyn TtsProvider>) -> Self {
-        Self { tts, session: ProjectSession::default(), encoder: Mutex::new(None) }
+        Self { tts, session: ProjectSession::default(), encoder: Mutex::new(None), exports: std::sync::Mutex::new(HashMap::new()) }
     }
 
     /// Cached encoder, detecting once (system resolution order) when none is known yet.

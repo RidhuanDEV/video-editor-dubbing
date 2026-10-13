@@ -17,7 +17,8 @@
     "rust:check": "cargo check --manifest-path src-tauri/Cargo.toml",
     "rust:test": "cargo test --manifest-path src-tauri/Cargo.toml",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "ffmpeg:fetch": "node scripts/fetch-ffmpeg.mjs"
   },
   "dependencies": {
     "@fontsource-variable/inter": "5.3.0",

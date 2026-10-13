@@ -7,6 +7,7 @@ mod logging;
 mod media;
 mod project;
 mod proxy;
+mod render;
 mod tts;
 
 use std::sync::Arc;
@@ -44,6 +45,8 @@ pub fn run() {
             commands::media::media_relink_file,
             commands::media::media_relink_folder,
             commands::media::media_build_proxy,
+            commands::export::export_start,
+            commands::export::export_cancel,
         ])
         .run(tauri::generate_context!());
 

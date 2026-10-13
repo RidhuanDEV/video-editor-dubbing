@@ -38,6 +38,7 @@ const ERROR_HINT: Readonly<Record<AppError["kind"], string>> = {
   io: "Gagal membaca/menulis file. Periksa izin folder.",
   binaryNotFound: "Atur path FFmpeg kustom atau pasang FFmpeg.",
   process: "Proses eksternal gagal. Lihat pesan di bawah.",
+  cancelled: "Proses dibatalkan.",
 };
 
 function ErrorBox({ error }: { readonly error: AppError }) {

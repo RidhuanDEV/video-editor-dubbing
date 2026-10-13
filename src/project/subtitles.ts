@@ -143,7 +143,7 @@ export function assColor(hex: string): string {
   return `&H${alpha.toString(16).padStart(2, "0")}${b}${g}${r}`.toUpperCase();
 }
 
-function assTime(ms: number): string {
+export function assTime(ms: number): string {
   const cs = Math.round(ms / 10);
   const h = Math.floor(cs / 360_000);
   const m = Math.floor(cs / 6000) % 60;
@@ -152,18 +152,13 @@ function assTime(ms: number): string {
 }
 
 /** Braces and backslashes would be read as ASS override tags. */
-function assText(text: string): string {
+export function assText(text: string): string {
   return text.replace(/[{}]/g, (c) => (c === "{" ? "(" : ")")).replace(/\\/g, "/");
 }
 
-/**
- * One Dialogue per active word: the whole cue is shown and only the word being spoken is
- * coloured (`\k` karaoke would leave every past word highlighted).
- */
-export function toAss(cues: ReadonlyArray<Cue>, settings: SubtitleSettings, canvas: CanvasSettings): string {
-  const back = assColor(settings.backColor);
-  const marginV = Math.round(canvas.height * 0.06);
-  const lines = [
+/** Script header with the given `Style:` lines; events follow `[Events]`. */
+export function assHeader(canvas: Pick<CanvasSettings, "width" | "height">, styles: ReadonlyArray<string>): ReadonlyArray<string> {
+  return [
     "[Script Info]",
     "ScriptType: v4.00+",
     `PlayResX: ${canvas.width}`,
@@ -173,25 +168,43 @@ export function toAss(cues: ReadonlyArray<Cue>, settings: SubtitleSettings, canv
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    // BorderStyle 4 (libass): one box behind the whole line. Style 3 boxes each run separately,
-    // so the highlight override split the box and overlapping translucent boxes looked darker.
-    // OutlineColour is fully transparent: Outline only pads the box, it must not halo the glyphs.
-    `Style: Default,${settings.fontName},${settings.fontSize},${assColor(settings.primaryColor)},${assColor(settings.primaryColor)},&HFF000000,${back},0,0,0,0,100,100,0,0,4,${Math.round(settings.fontSize / 5)},0,2,60,60,${marginV},1`,
+    ...styles,
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
   ];
+}
+
+/**
+ * Subtitle style. BorderStyle 4 (libass): one box behind the whole line; style 3 boxes each run
+ * separately, so the highlight override split the box and overlapping translucent boxes looked
+ * darker. OutlineColour is fully transparent: Outline only pads the box, it must not halo glyphs.
+ */
+export function subtitleStyle(settings: SubtitleSettings, canvas: Pick<CanvasSettings, "height">): string {
+  const primary = assColor(settings.primaryColor);
+  const marginV = Math.round(canvas.height * 0.06);
+  return `Style: Default,${settings.fontName},${settings.fontSize},${primary},${primary},&HFF000000,${assColor(settings.backColor)},0,0,0,0,100,100,0,0,4,${Math.round(settings.fontSize / 5)},0,2,60,60,${marginV},1`;
+}
+
+/**
+ * One Dialogue per active word: the whole cue is shown and only the word being spoken is
+ * coloured (`\k` karaoke would leave every past word highlighted).
+ */
+export function subtitleEvents(cues: ReadonlyArray<Cue>, settings: SubtitleSettings, layer = 0): ReadonlyArray<string> {
   const highlight = `{\\c${assColor(settings.highlightColor)}}`;
-  for (const cue of cues) {
-    cue.words.forEach((word, index) => {
+  return cues.flatMap((cue) =>
+    cue.words.flatMap((word, index) => {
       const next = cue.words[index + 1];
       const end = next ? next.startMs : cue.endMs;
-      if (end <= word.startMs) return;
+      if (end <= word.startMs) return [];
       const text = cue.words.map((w, i) => (i === index ? `${highlight}${assText(w.word)}{\\r}` : assText(w.word))).join(" ");
-      lines.push(`Dialogue: 0,${assTime(word.startMs)},${assTime(end)},Default,,0,0,0,,${text}`);
-    });
-  }
-  return `${lines.join("\n")}\n`;
+      return [`Dialogue: ${layer},${assTime(word.startMs)},${assTime(end)},Default,,0,0,0,,${text}`];
+    }),
+  );
+}
+
+export function toAss(cues: ReadonlyArray<Cue>, settings: SubtitleSettings, canvas: CanvasSettings): string {
+  return `${[...assHeader(canvas, [subtitleStyle(settings, canvas)]), ...subtitleEvents(cues, settings)].join("\n")}\n`;
 }
 
 function srtTime(ms: number): string {

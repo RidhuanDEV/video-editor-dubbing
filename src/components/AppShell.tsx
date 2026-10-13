@@ -130,7 +130,7 @@ export function AppShell({ view, onNavigate, theme, encoder, project, children }
           <span className="tabular">Encoder: {encoder ? ENCODER_LABEL[encoder] : "belum dideteksi"}</span>
         </Button>
 
-        <Button variant="primary" icon={Share} disabled title="Tersedia di Fase 5">
+        <Button variant="primary" icon={Share} disabled={!project} title="Ekspor (Ctrl+E)" onClick={() => onNavigate("deliver")}>
           Ekspor video
         </Button>
       </header>

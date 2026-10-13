@@ -93,7 +93,7 @@ pub async fn build_proxy(
     let timeout = duration_ms.map_or(MIN_TIMEOUT, |ms| Duration::from_millis(ms.saturating_mul(TIMEOUT_FACTOR)).max(MIN_TIMEOUT));
     let mut last_percent = 0_u8;
 
-    let output = run_with_progress(&ffmpeg.path, &arg_refs, timeout, |line| {
+    let output = run_with_progress(&ffmpeg.path, &arg_refs, timeout, std::future::pending(), |line| {
         if let (Some(done), Some(total)) = (progress_out_ms(line), duration_ms.filter(|d| *d > 0)) {
             let percent = u8::try_from((done.saturating_mul(100) / total).min(99)).unwrap_or(99);
             // Only report meaningful steps to keep IPC traffic low.

@@ -81,8 +81,13 @@ pub struct OpenedProject {
     pub recovery_json: Option<String>,
 }
 
-/// Folder-safe name: letters, digits, space, `-`, `_`; never a Windows reserved device name.
+/// Project folder name: `<safe stem>.smbproj`.
 pub fn folder_name_for(title: &str) -> String {
+    format!("{}.{PROJECT_EXTENSION}", safe_file_stem(title))
+}
+
+/// File-name-safe stem: letters, digits, space, `-`, `_`; never a Windows reserved device name.
+pub fn safe_file_stem(title: &str) -> String {
     let cleaned: String = title
         .chars()
         .map(|c| if c.is_alphanumeric() || matches!(c, ' ' | '-' | '_') { c } else { ' ' })
@@ -99,7 +104,7 @@ pub fn folder_name_for(title: &str) -> String {
     if RESERVED.iter().any(|r| r.eq_ignore_ascii_case(&name)) {
         name = format!("Proyek {name}");
     }
-    format!("{name}.{PROJECT_EXTENSION}")
+    name
 }
 
 pub fn create(parent: &Path, title: &str) -> Result<PathBuf, ProjectError> {

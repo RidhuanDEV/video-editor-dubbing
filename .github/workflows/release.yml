@@ -1,0 +1,55 @@
+name: Release
+
+# Builds installers for Windows and Linux (macOS pending, see below) on a version tag and attaches them to a
+# draft GitHub release.
+#
+# The pinned LGPL FFmpeg sidecar (release "ffmpeg-8.1-lgpl") is downloaded, checksum-verified
+# and bundled. NOT YET DONE (needs the owner's credentials as repository secrets):
+# - Windows Authenticode signing and macOS signing/notarization (SmartScreen / Gatekeeper).
+# - Signed auto-update (TAURI_SIGNING_PRIVATE_KEY + updater config).
+# - macOS: added to the matrix once ffmpeg-macos.yml has produced a pinned build.
+# Until then these artifacts are unsigned test builds.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+          - os: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Linux WebView dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: FFmpeg sidecar (pinned, checksum-verified)
+        run: node scripts/fetch-ffmpeg.mjs
+      - uses: tauri-apps/tauri-action@action-v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Script Studio ${{ github.ref_name }}
+          releaseBody: Unsigned test build. Bundles FFmpeg 8.1.3 (LGPL-3.0-or-later) as a separate program; source and provenance in the ffmpeg-8.1-lgpl release. See THIRD_PARTY_NOTICES.md.
+          releaseDraft: true
+          prerelease: true

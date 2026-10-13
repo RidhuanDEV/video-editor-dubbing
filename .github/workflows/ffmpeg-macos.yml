@@ -1,0 +1,124 @@
+name: FFmpeg macOS (LGPL)
+
+# BtbN/FFmpeg-Builds has no macOS builds, so the macOS sidecar is compiled here from the same
+# FFmpeg commit as the pinned Windows/Linux builds (release "ffmpeg-8.1-lgpl").
+#
+# Static, self-contained binaries: every dependency is built from a pinned source tag into a
+# private prefix and linked statically; --disable-autodetect keeps Homebrew libraries on the
+# runner from being picked up (they would make the binary depend on /opt/homebrew).
+# LGPL only: no --enable-gpl / --enable-nonfree. Encoders: h264_videotoolbox (hardware) and
+# libopenh264 (software fallback), as required by ADR D3.
+#
+# STATUS: written without access to a Mac; the first manual run may need adjustments.
+# After a successful run: download the artifacts, verify, attach them to the
+# ffmpeg-8.1-lgpl release, add the targets to src-tauri/binaries/ffmpeg.lock.json and add
+# macOS back to release.yml.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FFMPEG_COMMIT: 46d899d7a02bc63237472cc4897258d5ddf274ac
+  FRIBIDI_TAG: v1.0.16
+  FREETYPE_TAG: VER-2-13-3
+  HARFBUZZ_TAG: 10.1.0
+  LIBASS_TAG: 0.17.3
+  OPENH264_TAG: v2.5.0
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            triple: aarch64-apple-darwin
+            arch: arm64
+          - runner: macos-13
+            triple: x86_64-apple-darwin
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    env:
+      PREFIX: ${{ github.workspace }}/prefix
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - name: Build tools
+        run: |
+          brew install nasm meson ninja pkg-config
+          python3 --version
+
+      - name: Fetch sources (pinned)
+        run: |
+          set -euo pipefail
+          mkdir -p src && cd src
+          git clone --depth 1 --branch "$FRIBIDI_TAG" https://github.com/fribidi/fribidi.git
+          git clone --depth 1 --branch "$FREETYPE_TAG" https://gitlab.freedesktop.org/freetype/freetype.git
+          git clone --depth 1 --branch "$HARFBUZZ_TAG" https://github.com/harfbuzz/harfbuzz.git
+          git clone --depth 1 --branch "$LIBASS_TAG" https://github.com/libass/libass.git
+          git clone --depth 1 --branch "$OPENH264_TAG" https://github.com/cisco/openh264.git
+          curl -fsSL "https://github.com/FFmpeg/FFmpeg/archive/${FFMPEG_COMMIT}.tar.gz" | tar -xz
+          mv "FFmpeg-${FFMPEG_COMMIT}" ffmpeg
+
+      - name: Static dependencies
+        run: |
+          set -euo pipefail
+          export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
+          meson_static() {
+            (cd "src/$1" && meson setup build --prefix="$PREFIX" --libdir=lib --buildtype=release \
+              --default-library=static "${@:2}" && ninja -C build install)
+          }
+          meson_static fribidi -Ddocs=false -Dtests=false -Dbin=false
+          meson_static freetype -Dharfbuzz=disabled -Dpng=disabled -Dbrotli=disabled -Dbzip2=disabled -Dzlib=disabled
+          meson_static harfbuzz -Dfreetype=enabled -Dglib=disabled -Dgobject=disabled -Dcairo=disabled -Dicu=disabled -Dtests=disabled -Ddocs=disabled -Dutilities=disabled
+          meson_static libass -Dfontconfig=disabled -Dcoretext=enabled -Dasm=disabled
+          (cd src/openh264 && make -j"$(sysctl -n hw.ncpu)" OS=darwin ARCH=${{ matrix.arch }} PREFIX="$PREFIX" install-static)
+
+      - name: FFmpeg
+        run: |
+          set -euo pipefail
+          export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig"
+          cd src/ffmpeg
+          ./configure \
+            --prefix="$PREFIX" \
+            --pkg-config-flags="--static" \
+            --extra-cflags="-I$PREFIX/include" \
+            --extra-ldflags="-L$PREFIX/lib" \
+            --enable-version3 \
+            --disable-autodetect \
+            --enable-static --disable-shared \
+            --disable-doc --disable-ffplay \
+            --enable-videotoolbox --enable-audiotoolbox --enable-zlib --enable-iconv \
+            --enable-libass --enable-libfreetype --enable-libfribidi --enable-libharfbuzz \
+            --enable-libopenh264
+          make -j"$(sysctl -n hw.ncpu)"
+
+      - name: Verify (LGPL, encoders, filters, no Homebrew links)
+        run: |
+          set -euo pipefail
+          cd src/ffmpeg
+          ./ffmpeg -hide_banner -version | head -1
+          if ./ffmpeg -hide_banner -buildconf | grep -E -- "--enable-(gpl|nonfree)"; then echo "GPL/nonfree build" && exit 1; fi
+          ./ffmpeg -hide_banner -encoders | grep -E "h264_videotoolbox|libopenh264"
+          ./ffmpeg -hide_banner -filters | grep -E " (ass|zoompan|gblur|loudnorm|sidechaincompress) "
+          if otool -L ffmpeg | grep -E "/opt/homebrew|/usr/local/(opt|Cellar)"; then echo "links Homebrew libraries" && exit 1; fi
+          ./ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=black:s=256x256:r=30:d=1 -frames:v 1 -pix_fmt yuv420p -c:v libopenh264 -f null -
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          name="ffmpeg-8.1.3-46d899d-macos-${{ matrix.arch }}-lgpl"
+          mkdir -p "out/$name/bin"
+          cp src/ffmpeg/ffmpeg src/ffmpeg/ffprobe "out/$name/bin/"
+          cp src/ffmpeg/COPYING.LGPLv3 "out/$name/LICENSE.txt"
+          (cd src/ffmpeg && ./ffmpeg -hide_banner -buildconf) > "out/$name/BUILDCONF.txt"
+          (cd out && tar -cJf "$name.tar.xz" "$name" && shasum -a 256 "$name.tar.xz" | tee "$name.tar.xz.sha256")
+
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: ffmpeg-macos-${{ matrix.arch }}
+          path: |
+            out/*.tar.xz
+            out/*.sha256

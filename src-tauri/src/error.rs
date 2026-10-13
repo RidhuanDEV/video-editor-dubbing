@@ -19,6 +19,7 @@ pub enum ErrorKind {
     Io,
     BinaryNotFound,
     Process,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -53,6 +54,7 @@ impl From<FfmpegError> for AppError {
             FfmpegError::NotFound(_) | FfmpegError::InvalidCustomPath(_) => ErrorKind::BinaryNotFound,
             FfmpegError::Timeout(_) => ErrorKind::Timeout,
             FfmpegError::Spawn(_) | FfmpegError::Failed(_) => ErrorKind::Process,
+            FfmpegError::Cancelled => ErrorKind::Cancelled,
         };
         Self::new(kind, err.to_string())
     }

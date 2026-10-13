@@ -58,12 +58,22 @@ const MAX_STDERR_BYTES: u64 = 64 * 1024;
 
 /// Runs a long FFmpeg job and hands each stdout line to `on_line` (use with `-progress pipe:1`).
 /// stderr is drained concurrently so a chatty encoder can never block on a full pipe.
+/// When `cancel` resolves (or the timeout passes) first, the process is killed **and awaited**
+/// before returning: only then has it released its output file, so callers can delete it.
+/// (Dropping with kill-on-drop only sends the signal; on Windows the file stayed locked.)
 pub async fn run_with_progress(
     program: &Path,
     args: &[&str],
     timeout: Duration,
+    cancel: impl std::future::Future<Output = ()> + Send,
     mut on_line: impl FnMut(&str) + Send,
 ) -> Result<ProcessOutput, FfmpegError> {
+    enum Outcome {
+        StdoutClosed,
+        Cancelled,
+        TimedOut,
+    }
+
     let label = label_of(program);
     let mut child = command_for(program, args).spawn().map_err(|e| FfmpegError::Spawn(format!("{label}: {e}")))?;
     let stdout = child.stdout.take().ok_or_else(|| FfmpegError::Spawn(format!("{label}: stdout tidak tersedia")))?;
@@ -75,20 +85,32 @@ pub async fn run_with_progress(
         text
     });
 
-    let work = async {
+    let read_progress = async {
         let mut lines = BufReader::new(stdout).lines();
         while let Ok(Some(line)) = lines.next_line().await {
             on_line(&line);
         }
-        child.wait().await
     };
-    // On timeout `child` is dropped with kill_on_drop, so the encoder process dies with it.
-    let status = tokio::time::timeout(timeout, work)
-        .await
-        .map_err(|_| FfmpegError::Timeout(format!("{label} ({} dtk)", timeout.as_secs())))?
-        .map_err(|e| FfmpegError::Spawn(format!("{label}: {e}")))?;
-    let stderr = stderr_task.await.unwrap_or_default();
-    Ok(ProcessOutput { success: status.success(), stdout: String::new(), stderr })
+    let outcome = tokio::select! {
+        () = read_progress => Outcome::StdoutClosed,
+        () = cancel => Outcome::Cancelled,
+        () = tokio::time::sleep(timeout) => Outcome::TimedOut,
+    };
+    match outcome {
+        Outcome::StdoutClosed => {
+            let status = child.wait().await.map_err(|e| FfmpegError::Spawn(format!("{label}: {e}")))?;
+            let stderr = stderr_task.await.unwrap_or_default();
+            Ok(ProcessOutput { success: status.success(), stdout: String::new(), stderr })
+        }
+        Outcome::Cancelled => {
+            let _ = child.kill().await;
+            Err(FfmpegError::Cancelled)
+        }
+        Outcome::TimedOut => {
+            let _ = child.kill().await;
+            Err(FfmpegError::Timeout(format!("{label} ({} dtk)", timeout.as_secs())))
+        }
+    }
 }
 
 /// Parses `out_time_us=12345` from FFmpeg's `-progress` output into milliseconds.

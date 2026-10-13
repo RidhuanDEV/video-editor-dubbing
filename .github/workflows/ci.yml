@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx vite build
+
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Linux WebView dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libssl-dev
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      # tauri::generate_context! embeds the built frontend, so dist/ must exist before cargo.
+      - run: npm ci
+      - run: npx vite build
+      # tauri-build requires the declared externalBin files. Windows/Linux use the pinned LGPL
+      # build (checksum-verified); macOS has no pinned build yet, so check-only placeholders.
+      - name: FFmpeg sidecar
+        if: runner.os != 'macOS'
+        run: node scripts/fetch-ffmpeg.mjs
+      - name: FFmpeg sidecar placeholder (macOS, check only)
+        if: runner.os == 'macOS'
+        run: node scripts/fetch-ffmpeg.mjs --placeholder
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: cargo check --all-targets --manifest-path src-tauri/Cargo.toml
+      # Live tests (#[ignore]) need FFmpeg/GPU/network and run only on developer machines.
+      - run: cargo test --manifest-path src-tauri/Cargo.toml

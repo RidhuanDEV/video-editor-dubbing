@@ -4,3 +4,4 @@ src-tauri/target
 src-tauri/gen
 src-tauri/binaries/*
 !src-tauri/binaries/README.md
+!src-tauri/binaries/ffmpeg.lock.json

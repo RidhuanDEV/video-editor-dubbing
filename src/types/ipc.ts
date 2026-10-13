@@ -18,6 +18,7 @@ export const AppErrorKindSchema = z.enum([
   "io",
   "binaryNotFound",
   "process",
+  "cancelled",
 ]);
 
 export const AppErrorSchema = z.object({
@@ -149,9 +150,26 @@ export const JOB_EVENT = "job://event";
 
 export const JobEventSchema = z.object({
   jobId: z.uuid(),
-  kind: z.enum(["tts", "encoderDetection", "mediaImport", "mediaRelink", "mediaProxy"]),
+  kind: z.enum(["tts", "encoderDetection", "mediaImport", "mediaRelink", "mediaProxy", "export"]),
   status: z.enum(["started", "progress", "succeeded", "failed"]),
   message: z.string().nullable(),
+});
+
+// ---------------------------------------------------------------------------
+// Export (05 §4–5)
+// ---------------------------------------------------------------------------
+
+export const RENDER_PROGRESS_EVENT = "render://progress";
+
+export const PresetIdSchema = z.enum(["youtube1080", "youtube4k", "shorts", "whatsapp", "audioOnly"]);
+
+export const RenderProgressSchema = z.object({
+  jobId: z.string().min(1),
+  stage: z.enum(["measure", "encode"]),
+  percentage: z.number().min(0).max(100),
+  fps: z.number().nonnegative(),
+  speedMultiplier: z.number().nonnegative(),
+  etaSeconds: z.number().nullable(),
 });
 
 // ---------------------------------------------------------------------------
@@ -172,6 +190,8 @@ export type WordBoundary = DeepReadonly<z.infer<typeof WordBoundarySchema>>;
 export type TtsResult = DeepReadonly<z.infer<typeof TtsResultSchema>>;
 export type VoiceInfo = DeepReadonly<z.infer<typeof VoiceInfoSchema>>;
 export type JobEvent = DeepReadonly<z.infer<typeof JobEventSchema>>;
+export type PresetId = z.infer<typeof PresetIdSchema>;
+export type RenderProgress = DeepReadonly<z.infer<typeof RenderProgressSchema>>;
 export type OpenedProject = DeepReadonly<z.infer<typeof OpenedProjectSchema>>;
 export type ProbedMedia = DeepReadonly<z.infer<typeof ProbedMediaSchema>>;
 export type ImportOutcome = DeepReadonly<z.infer<typeof ImportOutcomeSchema>>;

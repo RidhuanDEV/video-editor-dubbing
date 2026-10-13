@@ -48,3 +48,17 @@ pub async fn pick_files<R: Runtime>(app: &AppHandle<R>, title: &str, filters: &[
     });
     rx.await.unwrap_or_default()
 }
+
+/// Save dialog; the chosen path is the only place an export may write.
+pub async fn save_file<R: Runtime>(app: &AppHandle<R>, title: &str, default_name: &str, filter: &Filter) -> Option<PathBuf> {
+    let (tx, rx) = oneshot::channel();
+    app.dialog()
+        .file()
+        .set_title(title)
+        .set_file_name(default_name)
+        .add_filter(filter.name, filter.extensions)
+        .save_file(move |file| {
+            let _ = tx.send(file.and_then(to_path));
+        });
+    rx.await.ok().flatten()
+}

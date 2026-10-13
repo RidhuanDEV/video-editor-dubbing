@@ -1,17 +1,17 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AppShell, type ProjectHeader, type ViewId } from "./components/AppShell";
 import { AudioPage } from "./components/AudioPage";
 import { Dialog } from "./components/Dialog";
 import { EditPage } from "./components/edit/EditPage";
 import { EngineView } from "./components/EngineView";
+import { ExportPage } from "./components/ExportPage";
 import { MediaPage } from "./components/MediaPage";
 import { Notices } from "./components/Notices";
 import { ScriptPage } from "./components/ScriptPage";
 import { StartScreen } from "./components/StartScreen";
 import { Button } from "./components/ui";
-import { WorkspacePage } from "./components/WorkspacePage";
 import { notify } from "./lib/notices";
 import { useTheme } from "./lib/theme";
 import { resetEditor } from "./project/editor";
@@ -29,7 +29,7 @@ async function finishExit(exit: Exclude<PendingExit, null>): Promise<void> {
 }
 
 /** Ctrl/Cmd+S save, Ctrl/Cmd+Z undo, Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z redo (03 §3). */
-function useProjectShortcuts(): void {
+function useProjectShortcuts(onExport: () => void): void {
   useEffect(() => {
     const onKey = (event: KeyboardEvent): void => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
@@ -45,11 +45,14 @@ function useProjectShortcuts(): void {
       } else if (key === "y" || (key === "z" && event.shiftKey)) {
         event.preventDefault();
         store.redo();
+      } else if (key === "e") {
+        event.preventDefault();
+        onExport();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [onExport]);
 }
 
 /** Intercepts the window close button while there are unsaved changes. */
@@ -94,7 +97,7 @@ export function App() {
 
   useAutosave();
   useProxyBuilder();
-  useProjectShortcuts();
+  useProjectShortcuts(useCallback(() => setView("deliver"), []));
 
   // Each opened project starts on the Edit page (03 §5.1) with a fresh transport.
   useEffect(() => {
@@ -127,7 +130,7 @@ export function App() {
     if (view === "script") return <ScriptPage onGoToMedia={() => setView("media")} />;
     if (view === "edit" || view === "effects") return <EditPage mode={view === "edit" ? "edit" : "effects"} onOpenEffects={() => setView("effects")} />;
     if (view === "audio") return <AudioPage />;
-    return <WorkspacePage page={view} />;
+    return <ExportPage />;
   })();
 
   return (

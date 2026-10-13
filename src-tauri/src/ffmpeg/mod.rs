@@ -25,6 +25,8 @@ pub enum FfmpegError {
     Timeout(String),
     #[error("Proses gagal: {0}")]
     Failed(String),
+    #[error("Dibatalkan")]
+    Cancelled,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

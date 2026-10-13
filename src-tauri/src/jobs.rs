@@ -16,6 +16,7 @@ pub enum JobKind {
     MediaImport,
     MediaRelink,
     MediaProxy,
+    Export,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
