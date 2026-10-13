@@ -20,17 +20,21 @@ export const useUpdater = create<UpdaterStore>()(() => ({ available: null, progr
 /** Kept outside the store: it is a backend resource handle, not UI state. */
 let pending: Update | null = null;
 
+/** Returns true when an update was found (the update dialog then opens). */
+export async function checkForUpdates(): Promise<boolean> {
+  const update = await check();
+  if (!update) return false;
+  pending = update;
+  useUpdater.setState({ available: { version: update.version, notes: update.body ?? "" } });
+  return true;
+}
+
+/** Once at startup in production builds. */
 export function useUpdateCheck(): void {
   useEffect(() => {
     if (!isTauri() || !import.meta.env.PROD) return;
-    check()
-      .then((update) => {
-        if (!update) return;
-        pending = update;
-        useUpdater.setState({ available: { version: update.version, notes: update.body ?? "" } });
-      })
-      // Offline or no published release yet: not worth interrupting the user.
-      .catch((error: Error) => console.warn("update check failed", error.message));
+    // Offline or no published release yet: not worth interrupting the user.
+    checkForUpdates().catch((error: Error) => console.warn("update check failed", error.message));
   }, []);
 }
 

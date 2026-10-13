@@ -16,7 +16,7 @@ pub struct ProcessOutput {
     pub stderr: String,
 }
 
-fn command_for(program: &Path, args: &[&str]) -> Command {
+pub(crate) fn command_for(program: &Path, args: &[&str]) -> Command {
     let mut command = Command::new(program);
     command
         .args(args)

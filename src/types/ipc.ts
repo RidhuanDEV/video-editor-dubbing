@@ -131,11 +131,23 @@ export const SettingsViewSchema = z.object({
   edgeTtsConsent: z.boolean(),
   azureRegion: z.string().nullable(),
   azureKeyStored: z.boolean(),
+  customFfmpegPath: z.string().nullable(),
 });
 
 // ---------------------------------------------------------------------------
 // Project & media
 // ---------------------------------------------------------------------------
+
+export const RecentProjectSchema = z.object({
+  path: z.string().min(1),
+  title: z.string(),
+  openedAt: z.string(),
+  available: z.boolean(),
+});
+
+/** Emitted by Rust after files are dropped on the window; the paths stay in Rust. */
+export const FILES_DROPPED_EVENT = "app://files-dropped";
+export const DropSummarySchema = z.object({ count: z.number().int().nonnegative() });
 
 export const OpenedProjectSchema = z.object({
   root: z.string().min(1),
@@ -219,6 +231,7 @@ export type SettingsView = DeepReadonly<z.infer<typeof SettingsViewSchema>>;
 export type PresetId = z.infer<typeof PresetIdSchema>;
 export type RenderProgress = DeepReadonly<z.infer<typeof RenderProgressSchema>>;
 export type OpenedProject = DeepReadonly<z.infer<typeof OpenedProjectSchema>>;
+export type RecentProject = DeepReadonly<z.infer<typeof RecentProjectSchema>>;
 export type ProbedMedia = DeepReadonly<z.infer<typeof ProbedMediaSchema>>;
 export type ImportOutcome = DeepReadonly<z.infer<typeof ImportOutcomeSchema>>;
 export type RelinkCandidate = DeepReadonly<z.infer<typeof RelinkCandidateSchema>>;

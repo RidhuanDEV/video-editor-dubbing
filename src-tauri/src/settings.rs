@@ -1,5 +1,6 @@
-//! App-level settings (not per project): TTS consent and Azure region in a JSON file in the app
-//! config dir; the Azure API key in the OS credential store (01 §7: keys never in plain files).
+//! App-level settings (not per project): TTS consent, Azure region, custom FFmpeg path and the
+//! recent-projects list in a JSON file in the app config dir; the Azure API key in the OS
+//! credential store (01 §7: keys never in plain files).
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -10,6 +11,7 @@ use thiserror::Error;
 const SETTINGS_FILE: &str = "settings.json";
 const KEYRING_SERVICE: &str = "dev.ridhuan.scriptstudio";
 const AZURE_KEY_USER: &str = "azure-speech-key";
+const MAX_RECENT_PROJECTS: usize = 10;
 
 #[derive(Debug, Error)]
 pub enum SettingsError {
@@ -27,6 +29,29 @@ pub struct AppSettings {
     /// The user accepted the Edge-TTS notice (unofficial service, text sent to Microsoft).
     pub edge_tts_consent: bool,
     pub azure_region: Option<String>,
+    /// ffmpeg executable chosen in a native dialog; ffprobe must sit beside it.
+    pub custom_ffmpeg_path: Option<PathBuf>,
+    /// Most recent first. Only folders the user opened through a dialog end up here, and only
+    /// these may be reopened without a dialog.
+    pub recent_projects: Vec<RecentProject>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentProject {
+    pub path: PathBuf,
+    pub title: String,
+    /// RFC 3339.
+    pub opened_at: String,
+}
+
+impl AppSettings {
+    /// Moves `path` to the front (updating its title) and keeps the list bounded.
+    pub fn remember_project(&mut self, path: &Path, title: &str, opened_at: String) {
+        self.recent_projects.retain(|p| p.path != path);
+        self.recent_projects.insert(0, RecentProject { path: path.to_path_buf(), title: title.to_owned(), opened_at });
+        self.recent_projects.truncate(MAX_RECENT_PROJECTS);
+    }
 }
 
 pub struct SettingsStore {
@@ -123,6 +148,18 @@ mod tests {
         assert!(validate_azure_key(&"a1".repeat(16)).is_ok());
         assert!(validate_azure_key("short").is_err());
         assert!(validate_azure_key(&format!("{}\n", "a".repeat(32))).is_err());
+    }
+
+    #[test]
+    fn recent_projects_are_unique_most_recent_first_and_bounded() {
+        let mut settings = AppSettings::default();
+        for i in 0..12 {
+            settings.remember_project(Path::new(&format!("C:/p{i}.smbproj")), &format!("P{i}"), format!("t{i}"));
+        }
+        settings.remember_project(Path::new("C:/p5.smbproj"), "Lima", "t99".into());
+        assert_eq!(settings.recent_projects.len(), MAX_RECENT_PROJECTS);
+        assert_eq!(settings.recent_projects[0].title, "Lima");
+        assert_eq!(settings.recent_projects.iter().filter(|p| p.path == Path::new("C:/p5.smbproj")).count(), 1);
     }
 
     #[test]

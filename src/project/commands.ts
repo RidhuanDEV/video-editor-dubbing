@@ -4,7 +4,7 @@
  * manifest snapshot, and are absolute ("set X to this"), so consecutive commands with the same
  * `coalesceKey` merge safely: keep the first `revert`, the last `apply`.
  */
-import type { MediaAsset, ProjectManifest, ScriptScene, VoiceConfig } from "../types";
+import type { AspectRatio, CanvasSettings, MediaAsset, ProjectManifest, ScriptScene, VoiceConfig } from "../types";
 
 export interface Command {
   readonly label: string;
@@ -354,4 +354,31 @@ export function setAudioMix(manifest: ProjectManifest, patch: Partial<Pick<Proje
     apply: (m) => ({ ...m, ...patch }),
     revert: (m) => ({ ...m, ...before }),
   };
+}
+
+/** Canvas size per aspect ratio (1080 on the short side; 4:3 keeps 1080 lines). */
+export const CANVAS_SIZE: Readonly<Record<AspectRatio, { readonly width: number; readonly height: number }>> = {
+  "16:9": { width: 1920, height: 1080 },
+  "9:16": { width: 1080, height: 1920 },
+  "1:1": { width: 1080, height: 1080 },
+  "4:3": { width: 1440, height: 1080 },
+};
+
+export function setCanvas(manifest: ProjectManifest, patch: Partial<Pick<CanvasSettings, "aspectRatio" | "fit" | "background">>, coalesceKey?: string): Command {
+  const before = manifest.canvas;
+  const size = patch.aspectRatio ? CANVAS_SIZE[patch.aspectRatio] : {};
+  const after: CanvasSettings = { ...before, ...patch, ...size };
+  return {
+    label: "Ubah kanvas",
+    ...(coalesceKey !== undefined && { coalesceKey }),
+    apply: (m) => ({ ...m, canvas: after }),
+    revert: (m) => ({ ...m, canvas: before }),
+  };
+}
+
+export function setProjectTitle(manifest: ProjectManifest, title: string): Command | null {
+  const before = manifest.title;
+  const after = title.trim() === "" ? before : title;
+  if (after === before) return null;
+  return { label: "Ganti judul proyek", coalesceKey: "project:title", apply: (m) => ({ ...m, title: after }), revert: (m) => ({ ...m, title: before }) };
 }

@@ -25,7 +25,7 @@ Remaining: macOS build, cross-OS verification and benchmarks (see Release checkl
 | `npm run tauri dev` | Run the desktop app (Vite on :1420 + Rust core) |
 | `npm run dev` | UI only in a browser; engine calls show "Engine Rust tidak tersedia" |
 | `npm run typecheck` | `tsc` strict for `src/` and `vite.config.ts` |
-| `npm test` | Vitest unit tests (schemas, commands/undo, chunking, sync status) |
+| `npm test` | Vitest unit tests (schemas, commands/undo, chunking, sync, readiness, waveforms, drag targets), token contrast (WCAG, both themes) and axe accessibility checks (jsdom) |
 | `npm run rust:check` / `npm run rust:test` | `cargo check` / `cargo test` for `src-tauri` |
 | `cargo test -- --ignored live_` (in `src-tauri`) | Live checks: real Edge-TTS, real FFmpeg encode/probe on this machine |
 | `npm run tauri build` | Production installer |
@@ -42,11 +42,19 @@ src/
                 session (open/save/autosave/recovery), chunk, sync, synthesis,
                 timeline (layout/snap), editor (playhead/selection), proxies (background queue),
                 effects (geometry/easing), subtitles (align/chunk/ASS/SRT), subtitleData,
-                overlay (export ASS: subtitles + badges + spotlight)
+                overlay (export ASS: subtitles + badges + spotlight), readiness (next step), workspace
+                (panel/dialog state), exportJob, mediaActions (import/drop/relink), waveforms, exit
   lib/ipc.ts    Typed invoke wrapper: every response/rejection validated with Zod
   lib/theme.ts  Theme hook (system/light/dark, Ctrl/Cmd+Shift+L, native title bar sync)
+  lib/desktop.ts Production guards: no WebView reload/print/find/back, no WebView context menu
   styles/       tokens.css (PRD 08 tokens) + index.css (Tailwind v4 @theme inline)
-  components/   AppShell, StartScreen, MediaPage, ScriptPage + SceneEditor, AudioPage, ExportPage, EngineView, Dialog, ui
+  components/   Dialog, Notices, SyncBadge
+    ui/         Design-system primitives on Radix (Button, IconButton, Tooltip, Select, Combobox, Checkbox,
+                Slider, RadioCards, Tabs, Segmented, Disclosure, EmptyState, ContextMenu, DropdownMenu, Field)
+    shell/      TitleBar, StatusBar, StartScreen (recent projects), SettingsDialog, CommandPalette (Ctrl+K)
+    studio/     Studio (resizable workspace), ScriptPanel, MediaPanel, PreviewPane (+ effect tools),
+                Preview, EffectGizmo, EffectLayers, Inspector (scene/effect/BGM/project), Timeline
+                (waveforms, context menus), ExportDialog, SetupWizard, ScriptDialogs
     edit/       EditPage (Edit + Efek), Preview, EffectLayers, EffectGizmo, EffectsPanel, Timeline
 src-tauri/src/
   ffmpeg/       resolver (custom → bundled → PATH), process (array args, timeout, kill-on-drop),
@@ -56,6 +64,7 @@ src-tauri/src/
   project.rs    .smbproj folder service: atomic writes inside the open project only
   media.rs      ffprobe metadata, thumbnails, relink by file or folder
   proxy.rs      preview proxies inside the project (video H.264 540p short GOP, audio AAC)
+  waveform.rs   audio peaks for timeline waveforms (streamed PCM, cached in cache/waveforms)
   render/       model (manifest subset + timeline math), graph (filtergraph generator, golden tests),
                 export (2-pass loudnorm, presets, progress, cancel, .part → rename)
   dialog.rs     Native dialogs opened from Rust (the webview never supplies paths to write)

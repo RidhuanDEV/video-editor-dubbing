@@ -12,12 +12,16 @@ import {
   projectCreate,
   projectDiscardRecovery,
   projectOpen,
+  projectOpenDropped,
+  projectOpenRecent,
   projectSave,
 } from "../lib/ipc";
 import { notify } from "../lib/notices";
-import type { OpenedProject, ProjectManifest } from "../types";
+import type { AspectRatio, OpenedProject, ProjectManifest } from "../types";
+import { CANVAS_SIZE } from "./commands";
 import { createManifest, loadManifest, serializeManifest } from "./manifest";
 import { isDirty, useProjectStore } from "./store";
+import { resetWorkspace } from "./workspace";
 
 export const AUTOSAVE_INTERVAL_MS = 30_000;
 
@@ -53,11 +57,12 @@ export async function refreshMissingAssets(): Promise<void> {
   useSessionUi.getState().setMissing(new Set(assets.filter((_, i) => result.value[i] === false).map((a) => a.id)));
 }
 
-async function adoptOpened(opened: OpenedProject, title: string): Promise<void> {
+async function adoptOpened(opened: OpenedProject, title: string, aspectRatio: AspectRatio = "16:9"): Promise<void> {
   const store = useProjectStore.getState();
   if (opened.manifestJson === null) {
     // Fresh folder: write the initial manifest right away so the folder is a valid project.
-    const manifest = createManifest(title);
+    const base = createManifest(title);
+    const manifest = { ...base, canvas: { ...base.canvas, aspectRatio, ...CANVAS_SIZE[aspectRatio] } };
     store.open({ root: opened.root, manifest, readOnly: false });
     await saveProject();
     return;
@@ -79,30 +84,50 @@ async function adoptOpened(opened: OpenedProject, title: string): Promise<void> 
   await refreshMissingAssets();
 }
 
-async function withBusy(task: () => Promise<void>): Promise<void> {
+/** Runs one open/create at a time; resolves true when a project ended up open. */
+async function withBusy(task: () => Promise<void>): Promise<boolean> {
   const ui = useSessionUi.getState();
-  if (ui.busy) return;
+  if (ui.busy) return false;
   ui.setBusy(true);
   try {
     await task();
   } finally {
     useSessionUi.getState().setBusy(false);
   }
+  return useProjectStore.getState().project !== null;
 }
 
-export function createProject(title: string): Promise<void> {
+export function createProject(title: string, aspectRatio: AspectRatio): Promise<boolean> {
   return withBusy(async () => {
     const result = await projectCreate(title);
     if (!result.ok) return notify("error", result.error.message);
-    if (result.value) await adoptOpened(result.value, title);
+    if (result.value) await adoptOpened(result.value, title, aspectRatio);
   });
 }
 
-export function openProject(): Promise<void> {
+export function openProject(): Promise<boolean> {
   return withBusy(async () => {
     const result = await projectOpen();
     if (!result.ok) return notify("error", result.error.message);
     if (result.value) await adoptOpened(result.value, "");
+  });
+}
+
+export function openRecentProject(path: string): Promise<boolean> {
+  return withBusy(async () => {
+    const result = await projectOpenRecent(path);
+    if (!result.ok) return notify("error", result.error.message);
+    await adoptOpened(result.value, "");
+  });
+}
+
+/** Opens a `.smbproj` folder dropped on the window; false when the drop held none. */
+export function openDroppedProject(): Promise<boolean> {
+  return withBusy(async () => {
+    const result = await projectOpenDropped();
+    if (!result.ok) return notify("error", result.error.message);
+    if (result.value) await adoptOpened(result.value, "");
+    else notify("info", "Seret folder proyek (.smbproj) untuk membukanya, atau buat proyek dulu untuk mengimpor media.");
   });
 }
 
@@ -124,6 +149,7 @@ export async function closeProject(): Promise<void> {
   await projectClose();
   useProjectStore.getState().close();
   useSessionUi.setState({ missingAssetIds: new Set(), pendingRecovery: null });
+  resetWorkspace();
 }
 
 export async function resolveRecovery(restore: boolean): Promise<void> {

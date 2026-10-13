@@ -37,6 +37,8 @@ tauri-plugin-dialog = "2"
 keyring = "4.2.0"
 tauri-plugin-updater = "2.13.3"
 tauri-plugin-process = "2.4.0"
+tauri-plugin-single-instance = "=2.5.0"
+tauri-plugin-window-state = "=2.5.0"
 
 [profile.release]
 codegen-units = 1

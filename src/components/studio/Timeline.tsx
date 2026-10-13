@@ -3,6 +3,7 @@
  * contiguous). A drag previews live and commits one command on release (one undo step).
  */
 import {
+  AudioLines,
   Captions,
   Film,
   Headphones,
@@ -11,6 +12,7 @@ import {
   Magnet,
   Mic,
   Music,
+  Play,
   Plus,
   Scissors,
   Sparkles,
@@ -25,10 +27,14 @@ import { removeBgmTrack, removeEffect, removeScene, setTrackState, splitScene, t
 import { EFFECT_LABEL } from "../../project/effects";
 import { MAX_PX_PER_SEC, MIN_PX_PER_SEC, useEditor } from "../../project/editor";
 import { useProjectStore } from "../../project/store";
+import { executeWithUndo } from "../../project/undoable";
+import { synthesizeScene } from "../../project/synthesis";
+import { peakColumns, useWaveform } from "../../project/waveforms";
+import { useMediaDrag } from "../../project/mediaDrag";
 import { isTrackLocked, layoutTimeline, snapCandidates, snapMs, splitPointAt, type TimelineLayout } from "../../project/timeline";
 import type { Cue } from "../../project/subtitles";
 import type { ProjectManifest, TrackKind } from "../../types";
-import { IconButton } from "../ui";
+import { ContextMenu, IconButton, Slider, type MenuItem } from "../ui";
 
 const HEADER_W = 176;
 const ROW_H = 40;
@@ -102,7 +108,7 @@ function Ruler({ durationMs, pxPerMs, onScrubStart }: { readonly durationMs: num
     <div className="relative cursor-ew-resize border-b border-line-subtle bg-panel" style={{ height: RULER_H }} onPointerDown={onScrubStart} aria-hidden>
       {ticks.map((t) => (
         <div key={t} className="absolute top-0 h-full border-l border-line" style={{ left: t * 1000 * pxPerMs }}>
-          <span className="absolute top-1 left-1 font-mono text-[11px] tabular text-fg-2">{formatTimecode(t * 1000).replace(/\.0$/, "")}</span>
+          <span className="absolute top-1 left-1 font-mono text-caption tabular text-fg-2">{formatTimecode(t * 1000).replace(/\.0$/, "")}</span>
         </div>
       ))}
     </div>
@@ -134,7 +140,7 @@ function TrackHeader({ manifest, row, extra }: { readonly manifest: ProjectManif
   return (
     <div className="flex items-center gap-1.5 border-r border-b border-line-subtle bg-panel px-2" style={{ height: ROW_H, width: HEADER_W }}>
       <Icon size={16} strokeWidth={1.75} className={`shrink-0 ${row.iconClass}`} aria-hidden />
-      <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{row.label}</span>
+      <span className="min-w-0 flex-1 truncate text-ui font-medium">{row.label}</span>
       {extra}
       {row.audio && (
         <>
@@ -143,7 +149,7 @@ function TrackHeader({ manifest, row, extra }: { readonly manifest: ProjectManif
             label={`${state.muted ? "Bunyikan" : "Bisukan"} ${row.label}`}
             pressed={state.muted}
             disabled={readOnly}
-            className="size-7"
+            size="sm"
             onClick={() => execute(setTrackState(manifest, row.kind, { muted: !state.muted }))}
           />
           <IconButton
@@ -151,7 +157,7 @@ function TrackHeader({ manifest, row, extra }: { readonly manifest: ProjectManif
             label={`Solo ${row.label}`}
             pressed={state.solo}
             disabled={readOnly}
-            className="size-7"
+            size="sm"
             onClick={() => execute(setTrackState(manifest, row.kind, { solo: !state.solo }))}
           />
         </>
@@ -161,7 +167,7 @@ function TrackHeader({ manifest, row, extra }: { readonly manifest: ProjectManif
         label={`${state.locked ? "Buka kunci" : "Kunci"} track ${row.label}`}
         pressed={state.locked}
         disabled={readOnly}
-        className="size-7"
+        size="sm"
         onClick={() => execute(setTrackState(manifest, row.kind, { locked: !state.locked }))}
       />
     </div>
@@ -169,6 +175,49 @@ function TrackHeader({ manifest, row, extra }: { readonly manifest: ProjectManif
 }
 
 const HANDLE = "absolute top-0 bottom-0 z-10 w-1.5 cursor-ew-resize bg-transparent hover:bg-accent/60";
+
+/** Bar width + gap of the waveform, in px. */
+const WAVE_STEP_PX = 3;
+
+/** Peak bars for `[startS, startS + durationS)` of an audio file, drawn `width` px wide. */
+function Waveform({ path, startS, durationS, width, className }: {
+  readonly path: string | undefined;
+  readonly startS: number;
+  readonly durationS: number;
+  readonly width: number;
+  readonly className: string;
+}) {
+  const peaks = useWaveform(path);
+  if (!peaks || width < WAVE_STEP_PX * 2) return null;
+  const columns = peakColumns(peaks, startS, durationS, Math.floor(width / WAVE_STEP_PX));
+  return (
+    <svg className={`pointer-events-none absolute inset-x-0 bottom-0 h-full ${className}`} width={width} preserveAspectRatio="none" viewBox={`0 0 ${width} 100`} aria-hidden>
+      {columns.map((level, i) => {
+        const h = Math.max(2, level * 90);
+        return <rect key={i} x={i * WAVE_STEP_PX} y={(100 - h) / 2} width={WAVE_STEP_PX - 1} height={h} rx={0.5} />;
+      })}
+    </svg>
+  );
+}
+
+function sceneMenu(manifest: ProjectManifest, sceneId: string, index: number, startMs: number, locked: boolean): ReadonlyArray<MenuItem> {
+  const scene = manifest.scenes.find((s) => s.id === sceneId);
+  return [
+    {
+      label: "Putar dari sini",
+      icon: Play,
+      onSelect: () => {
+        const editor = useEditor.getState();
+        editor.select({ type: "scene", id: sceneId });
+        editor.seek(startMs, Number.MAX_SAFE_INTEGER);
+        editor.setPlaying(true);
+      },
+    },
+    { label: "Potong di playhead", icon: Scissors, shortcut: "C", disabled: locked, onSelect: () => splitAtPlayhead(manifest) },
+    { label: "Sintesis suara", icon: AudioLines, disabled: !scene || scene.narration.trim() === "", onSelect: () => void synthesizeScene(sceneId) },
+    { label: "Hapus scene", icon: Trash2, shortcut: "Delete", danger: true, disabled: locked, onSelect: () => executeWithUndo(removeScene(manifest, sceneId), `Scene ${index + 1} dihapus.`) },
+  ];
+}
 
 export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: ProjectManifest; readonly cues: ReadonlyArray<Cue>; readonly onAddBgm: () => void }) {
   const execute = useProjectStore((s) => s.execute);
@@ -179,6 +228,7 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
   const [snapLine, setSnapLine] = useState<number | null>(null);
   const [snapping, setSnapping] = useState(true);
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
+  const dropTarget = useMediaDrag((s) => s.target);
   const laneRef = useRef<HTMLDivElement>(null);
 
   const pxPerMs = pxPerSec / 1000;
@@ -275,10 +325,7 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
   };
 
   const deleteSelected = (): void => {
-    if (selection?.type === "scene" && !videoLocked) execute(removeScene(manifest, selection.id));
-    if (selection?.type === "bgm" && !bgmLocked) execute(removeBgmTrack(manifest, selection.id));
-    if (selection?.type === "effect" && !isTrackLocked(manifest.tracks, "effects") && !readOnly) execute(removeEffect(manifest, selection.sceneId, selection.id));
-    useEditor.getState().select(null);
+    deleteSelection(manifest);
   };
 
   // Boolean selector: re-renders only when splittability flips, not on every playhead frame.
@@ -288,20 +335,21 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
   return (
     <div className="flex h-full min-h-0 flex-col bg-timeline">
       <div className="flex items-center gap-1 border-b border-line-subtle bg-panel px-2 py-1">
-        <IconButton icon={Scissors} label="Potong di playhead (C)" onClick={split} disabled={!canSplit} className="disabled:opacity-40" />
-        <IconButton icon={Trash2} label="Hapus yang dipilih (Delete)" onClick={deleteSelected} disabled={selection === null || readOnly} className="disabled:opacity-40" />
+        <IconButton icon={Scissors} label="Potong di playhead" shortcut="C" onClick={split} disabled={!canSplit} />
+        <IconButton icon={Trash2} label="Hapus yang dipilih" shortcut="Delete" onClick={deleteSelected} disabled={selection === null || readOnly} />
         <IconButton icon={Magnet} label={snapping ? "Snapping aktif" : "Snapping mati"} pressed={snapping} onClick={() => setSnapping(!snapping)} />
-        <label className="ml-auto flex items-center gap-2 text-[12px] text-fg-2">
-          Zoom
-          <input
-            type="range"
+        <div className="ml-auto flex items-center gap-2 text-caption text-fg-2">
+          <span aria-hidden>Zoom</span>
+          <Slider
+            id="timeline-zoom"
+            ariaLabel="Zoom timeline"
             min={MIN_PX_PER_SEC}
             max={MAX_PX_PER_SEC}
             value={pxPerSec}
-            onChange={(e) => useEditor.getState().setZoom(e.target.valueAsNumber)}
-            className="w-32 accent-[var(--accent)]"
+            onChange={(value) => useEditor.getState().setZoom(value)}
+            className="w-32"
           />
-        </label>
+        </div>
       </div>
 
       <div
@@ -322,7 +370,7 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
                 manifest={manifest}
                 row={row}
                 {...(row.kind === "bgm" && {
-                  extra: <IconButton icon={Plus} label="Tambah BGM" onClick={onAddBgm} disabled={bgmLocked} className="size-7" />,
+                  extra: <IconButton icon={Plus} label="Tambah BGM" onClick={onAddBgm} disabled={bgmLocked} size="sm" />,
                 })}
               />
             ))}
@@ -332,7 +380,16 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
             <Ruler durationMs={layout.durationMs} pxPerMs={pxPerMs} onScrubStart={startScrub} />
 
             {ROWS.map((row) => (
-              <div key={row.kind} className="relative border-b border-line-subtle" style={{ height: ROW_H }} onPointerDown={startScrub}>
+              <div
+                key={row.kind}
+                className={`relative border-b border-line-subtle ${
+                  (row.kind === "video" && dropTarget === "scenes") || (row.kind === "bgm" && dropTarget === "bgm-lane") ? "bg-accent-subtle/40" : ""
+                }`}
+                style={{ height: ROW_H }}
+                onPointerDown={startScrub}
+                {...(row.kind === "video" && { "data-drop": "scenes" })}
+                {...(row.kind === "bgm" && { "data-drop": "bgm-lane", "data-px-per-ms": String(pxPerMs) })}
+              >
                 {row.kind === "video" &&
                   layout.segments.map((segment) => {
                     const selected = selection?.type === "scene" && selection.id === segment.scene.id;
@@ -340,10 +397,16 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
                     const moving = (segment.videoEndMs - segment.startMs) * pxPerMs;
                     const hold = (segment.endMs - segment.videoEndMs) * pxPerMs;
                     return (
-                      <div key={segment.scene.id} className="absolute top-1 bottom-1" style={{ left, width: moving + hold }}>
+                      <div
+                        key={segment.scene.id}
+                        data-drop={`scene:${segment.scene.id}`}
+                        className={`absolute top-1 bottom-1 ${dropTarget === `scene:${segment.scene.id}` ? "rounded-sm outline-2 outline-accent" : ""}`}
+                        style={{ left, width: moving + hold }}
+                      >
+                        <ContextMenu items={sceneMenu(manifest, segment.scene.id, segment.index, segment.startMs, videoLocked)}>
                         <button
                           type="button"
-                          className={`absolute top-0 bottom-0 left-0 overflow-hidden rounded-sm border-t-2 border-track-video bg-track-video/20 px-1.5 text-left text-[12px] ${
+                          className={`absolute top-0 bottom-0 left-0 overflow-hidden rounded-sm border-t-2 border-track-video bg-track-video/20 px-1.5 text-left text-caption ${
                             selected ? "outline-2 outline-accent" : ""
                           }`}
                           style={{ width: Math.max(moving, 2) }}
@@ -355,6 +418,7 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
                             <span className="font-mono tabular text-fg-2">{String(segment.index + 1).padStart(2, "0")}</span> {segment.scene.title}
                           </span>
                         </button>
+                        </ContextMenu>
                         {hold > 1 && (
                           <div
                             className="absolute top-0 bottom-0 rounded-r-sm opacity-60"
@@ -400,16 +464,23 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
                     segment.scene.audioDurationMs !== undefined ? (
                       <div
                         key={segment.scene.id}
-                        className="absolute top-1 bottom-1 truncate rounded-sm border-t-2 border-track-narration bg-track-narration/20 px-1.5 font-mono text-[11px] leading-[28px] tabular"
+                        className="absolute top-1 bottom-1 overflow-hidden rounded-sm border-t-2 border-track-narration bg-track-narration/15"
                         style={{ left: segment.startMs * pxPerMs, width: (segment.audioEndMs - segment.startMs) * pxPerMs }}
-                        title={`Narasi scene ${segment.index + 1}`}
+                        title={`Narasi scene ${segment.index + 1} · ${(segment.scene.audioDurationMs / 1000).toFixed(2)} dtk`}
                       >
-                        {(segment.scene.audioDurationMs / 1000).toFixed(2)}s
+                        <Waveform
+                          path={segment.scene.audioCachePath}
+                          startS={0}
+                          durationS={(segment.audioEndMs - segment.startMs) / 1000}
+                          width={(segment.audioEndMs - segment.startMs) * pxPerMs}
+                          className="fill-track-narration/70"
+                        />
+                        <span className="relative block truncate px-1.5 font-mono text-caption leading-[28px] tabular">{(segment.scene.audioDurationMs / 1000).toFixed(2)}s</span>
                       </div>
                     ) : segment.scene.narration.trim() !== "" ? (
                       <div
                         key={segment.scene.id}
-                        className="absolute top-1 bottom-1 truncate rounded-sm border border-dashed border-track-narration px-1.5 text-[11px] leading-[26px] text-fg-2"
+                        className="absolute top-1 bottom-1 truncate rounded-sm border border-dashed border-track-narration px-1.5 text-caption leading-[26px] text-fg-2"
                         style={{ left: segment.startMs * pxPerMs, width: (segment.endMs - segment.startMs) * pxPerMs }}
                       >
                         Belum disintesis
@@ -422,10 +493,22 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
                     segment.scene.effects.map((effect) => {
                       const selected = selection?.type === "effect" && selection.id === effect.id;
                       return (
+                        <ContextMenu
+                          key={effect.id}
+                          items={[
+                            {
+                              label: "Hapus efek",
+                              icon: Trash2,
+                              shortcut: "Delete",
+                              danger: true,
+                              disabled: readOnly || isTrackLocked(manifest.tracks, "effects"),
+                              onSelect: () => executeWithUndo(removeEffect(manifest, segment.scene.id, effect.id), "Efek dihapus."),
+                            },
+                          ]}
+                        >
                         <button
                           type="button"
-                          key={effect.id}
-                          className={`absolute top-1 bottom-1 truncate rounded-sm border-t-2 border-track-effects bg-track-effects/20 px-1.5 text-left text-[11px] leading-[28px] ${
+                          className={`absolute top-1 bottom-1 truncate rounded-sm border-t-2 border-track-effects bg-track-effects/20 px-1.5 text-left text-caption leading-[28px] ${
                             selected ? "outline-2 outline-accent" : ""
                           }`}
                           style={{ left: (segment.startMs + effect.startOffsetMs) * pxPerMs, width: effect.durationMs * pxPerMs }}
@@ -434,6 +517,7 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
                         >
                           {EFFECT_LABEL[effect.type]}
                         </button>
+                        </ContextMenu>
                       );
                     }),
                   )}
@@ -443,9 +527,21 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
                     const selected = selection?.type === "bgm" && selection.id === track.id;
                     const width = track.durationMs * pxPerMs;
                     return (
-                      <div
+                      <ContextMenu
                         key={track.id}
-                        className={`absolute top-1 bottom-1 rounded-sm border-t-2 border-track-bgm bg-track-bgm/20 ${selected ? "outline-2 outline-accent" : ""} ${
+                        items={[
+                          {
+                            label: "Hapus musik",
+                            icon: Trash2,
+                            shortcut: "Delete",
+                            danger: true,
+                            disabled: bgmLocked,
+                            onSelect: () => executeWithUndo(removeBgmTrack(manifest, track.id), "Musik latar dihapus."),
+                          },
+                        ]}
+                      >
+                      <div
+                        className={`absolute top-1 bottom-1 overflow-hidden rounded-sm border-t-2 border-track-bgm bg-track-bgm/15 ${selected ? "outline-2 outline-accent" : ""} ${
                           bgmLocked ? "" : "cursor-grab active:cursor-grabbing"
                         }`}
                         style={{ left: track.startOffsetMs * pxPerMs, width }}
@@ -459,7 +555,8 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
                           }
                         }}
                       >
-                        <span className="block truncate px-1.5 text-[11px] leading-[28px]">{track.label}</span>
+                        <Waveform path={track.filePath} startS={0} durationS={track.durationMs / 1000} width={width} className="fill-track-bgm/60" />
+                        <span className="relative block truncate px-1.5 text-caption leading-[28px]">{track.label}</span>
                         {!bgmLocked && (
                           <div
                             className={HANDLE}
@@ -474,6 +571,7 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
                           />
                         )}
                       </div>
+                      </ContextMenu>
                     );
                   })}
 
@@ -483,7 +581,7 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
                   cues.map((cue) => (
                     <div
                       key={cue.id}
-                      className={`pointer-events-none absolute top-1 bottom-1 truncate rounded-sm border-t-2 border-track-subtitle bg-track-subtitle/20 px-1 text-[11px] leading-[28px] ${
+                      className={`pointer-events-none absolute top-1 bottom-1 truncate rounded-sm border-t-2 border-track-subtitle bg-track-subtitle/20 px-1 text-caption leading-[28px] ${
                         cue.precise ? "" : "border-dashed"
                       }`}
                       style={{ left: cue.startMs * pxPerMs, width: (cue.endMs - cue.startMs) * pxPerMs }}
@@ -502,6 +600,34 @@ export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: Proj
       </div>
     </div>
   );
+}
+
+const DELETED_MESSAGE: Readonly<Record<"scene" | "bgm" | "effect", string>> = { scene: "Scene dihapus.", bgm: "BGM dihapus.", effect: "Efek dihapus." };
+
+/**
+ * Deletes the selected scene, BGM or effect unless its track is locked, with an "Urungkan" toast.
+ * Shared by the toolbar button and the Delete key. Returns whether anything was deleted.
+ */
+export function deleteSelection(manifest: ProjectManifest): boolean {
+  const editor = useEditor.getState();
+  const selection = editor.selection;
+  if (!selection) return false;
+  switch (selection.type) {
+    case "scene":
+      if (isTrackLocked(manifest.tracks, "video")) return false;
+      executeWithUndo(removeScene(manifest, selection.id), DELETED_MESSAGE.scene);
+      break;
+    case "bgm":
+      if (isTrackLocked(manifest.tracks, "bgm")) return false;
+      executeWithUndo(removeBgmTrack(manifest, selection.id), DELETED_MESSAGE.bgm);
+      break;
+    case "effect":
+      if (isTrackLocked(manifest.tracks, "effects")) return false;
+      executeWithUndo(removeEffect(manifest, selection.sceneId, selection.id), DELETED_MESSAGE.effect);
+      break;
+  }
+  editor.select(null);
+  return true;
 }
 
 /** Shared by the Edit page keyboard handler. */

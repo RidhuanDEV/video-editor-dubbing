@@ -47,7 +47,10 @@
       "binaries/FFMPEG-LICENSE.txt": "licenses/FFMPEG-LICENSE.txt",
       "../LICENSE": "licenses/LICENSE",
       "../NOTICE": "licenses/NOTICE",
-      "../THIRD_PARTY_NOTICES.md": "licenses/THIRD_PARTY_NOTICES.md"
+      "../THIRD_PARTY_NOTICES.md": "licenses/THIRD_PARTY_NOTICES.md",
+      "fonts/Inter-Regular.ttf": "fonts/Inter-Regular.ttf",
+      "fonts/Inter-Bold.ttf": "fonts/Inter-Bold.ttf",
+      "fonts/Inter-OFL.txt": "licenses/Inter-OFL.txt"
     }
   },
   "plugins": {

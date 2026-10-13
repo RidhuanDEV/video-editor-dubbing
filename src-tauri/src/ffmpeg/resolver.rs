@@ -6,6 +6,7 @@
 use std::env;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::sync::RwLock;
 
 use serde::Serialize;
 
@@ -25,11 +26,22 @@ pub struct ResolvedBinary {
     pub source: BinarySource,
 }
 
+/// The custom FFmpeg chosen in Settings (persisted in settings.json). Every job resolves
+/// through it, so proxies, detection and export all use the same binary.
+static CONFIGURED_CUSTOM: RwLock<Option<PathBuf>> = RwLock::new(None);
+
+pub fn set_configured_custom(path: Option<PathBuf>) {
+    *CONFIGURED_CUSTOM.write().unwrap_or_else(std::sync::PoisonError::into_inner) = path;
+}
+
 /// Resolve against the real environment: sidecars live next to the app executable.
-pub fn resolve(tool: Tool, custom_ffmpeg: Option<&Path>) -> Result<ResolvedBinary, FfmpegError> {
+/// `custom_override` tests a candidate path; `None` means the configured custom path, if any.
+pub fn resolve(tool: Tool, custom_override: Option<&Path>) -> Result<ResolvedBinary, FfmpegError> {
+    let configured = CONFIGURED_CUSTOM.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
+    let custom = custom_override.map(Path::to_path_buf).or(configured);
     let exe_dir = env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
     let path_var = env::var_os("PATH");
-    resolve_with(tool, custom_ffmpeg, exe_dir.as_deref(), path_var.as_deref())
+    resolve_with(tool, custom.as_deref(), exe_dir.as_deref(), path_var.as_deref())
 }
 
 pub(crate) fn resolve_with(

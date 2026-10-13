@@ -8,7 +8,9 @@ use tauri::{AppHandle, State};
 use crate::dialog::{self, Filter};
 use crate::error::{AppError, ErrorKind};
 use crate::jobs::{validate_job_id, Job, JobKind};
+use crate::project::WAVEFORMS_DIR;
 use crate::proxy;
+use crate::waveform;
 use crate::media::{self, MissingAsset, ProbedMedia, RelinkCandidate, AUDIO_EXTENSIONS, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS};
 
 use super::{validate_asset_id, AppState};
@@ -40,17 +42,35 @@ pub async fn media_import(app: AppHandle, state: State<'_, AppState>, job_id: St
     let job_id = validate_job_id(&job_id)?;
     let root = state.session.require_root()?;
     let paths = dialog::pick_files(&app, "Impor media", &MEDIA_FILTERS).await;
+    import_paths(&app, &root, &job_id, paths).await
+}
+
+fn is_supported_media(path: &Path) -> bool {
+    let ext = path.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+    path.is_file() && [VIDEO_EXTENSIONS, AUDIO_EXTENSIONS, IMAGE_EXTENSIONS].iter().any(|list| list.contains(&ext.as_str()))
+}
+
+/// Imports the media files of the last drop on the window (paths captured in Rust). Folders and
+/// unsupported files in the drop are skipped.
+#[tauri::command]
+pub async fn media_import_dropped(app: AppHandle, state: State<'_, AppState>, job_id: String) -> Result<Vec<ImportOutcome>, AppError> {
+    let job_id = validate_job_id(&job_id)?;
+    let root = state.session.require_root()?;
+    let paths = state.take_dropped().into_iter().filter(|p| is_supported_media(p)).collect();
+    import_paths(&app, &root, &job_id, paths).await
+}
+
+async fn import_paths(app: &AppHandle, root: &Path, job_id: &str, paths: Vec<std::path::PathBuf>) -> Result<Vec<ImportOutcome>, AppError> {
     if paths.is_empty() {
         return Ok(Vec::new());
     }
-
-    let job = Job::start(&app, &job_id, JobKind::MediaImport);
+    let job = Job::start(app, job_id, JobKind::MediaImport);
     let total = paths.len();
     let mut outcomes = Vec::with_capacity(total);
     for (index, path) in paths.iter().enumerate() {
         job.progress(format!("Menganalisis {} ({}/{total})", file_name(path), index + 1));
         let id = uuid::Uuid::new_v4().to_string();
-        outcomes.push(match media::import_file(&root, path, id).await {
+        outcomes.push(match media::import_file(root, path, id).await {
             Ok(media) => ImportOutcome::Imported { media },
             Err(err) => ImportOutcome::Failed { file_name: file_name(path), message: AppError::from(err).message },
         });
@@ -155,4 +175,23 @@ pub async fn media_build_proxy(
     .await
     .map_err(AppError::from);
     job.finish(result)
+}
+
+/// Waveform peaks (`waveform::PEAKS_PER_SECOND` per second, 0–255) for a narration file in the
+/// project's TTS cache or an imported audio file (BGM). Only peak values leave Rust.
+#[tauri::command]
+pub async fn audio_peaks(state: State<'_, AppState>, path: String) -> Result<Vec<u8>, AppError> {
+    let root = state.session.require_root()?;
+    let audio = match crate::render::graph::narration_path(&root, &path) {
+        Some(narration) => narration,
+        None => {
+            let candidate = std::path::PathBuf::from(&path);
+            let ext = candidate.extension().map(|e| e.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+            if !(candidate.is_absolute() && candidate.is_file() && AUDIO_EXTENSIONS.contains(&ext.as_str())) {
+                return Err(AppError::new(ErrorKind::InvalidRequest, "bukan file audio yang valid"));
+            }
+            candidate
+        }
+    };
+    Ok(waveform::peaks(&audio, &root.join(WAVEFORMS_DIR)).await?)
 }

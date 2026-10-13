@@ -7,6 +7,7 @@ import { ttsSynthesize } from "../lib/ipc";
 import { requestEdgeConsent } from "../lib/settings";
 import { invalidateVoices } from "../lib/voices";
 import { newJobId } from "../lib/jobs";
+import { notify } from "../lib/notices";
 import type { AppError, ScriptScene, VoiceConfig } from "../types";
 import { effectiveVoice } from "./commands";
 import { useProjectStore } from "./store";
@@ -15,9 +16,11 @@ export type SynthesisStatus = { readonly state: "loading" } | { readonly state: 
 
 interface SynthesisStore {
   readonly byScene: ReadonlyMap<string, SynthesisStatus>;
+  /** "Synthesize all" progress, shown in the status bar; null when no batch runs. */
+  readonly batch: { readonly done: number; readonly total: number } | null;
 }
 
-export const useSynthesis = create<SynthesisStore>()(() => ({ byScene: new Map() }));
+export const useSynthesis = create<SynthesisStore>()(() => ({ byScene: new Map(), batch: null }));
 
 function setStatus(sceneId: string, status: SynthesisStatus | null): void {
   useSynthesis.setState((state) => {
@@ -73,15 +76,25 @@ export async function synthesizeScene(sceneId: string): Promise<boolean> {
   return true;
 }
 
-/** Sequential on purpose: one WebSocket at a time is kinder to an unofficial service. */
-export async function synthesizeMissing(onProgress: (done: number, total: number) => void): Promise<number> {
-  const scenes = useProjectStore.getState().project?.manifest.scenes ?? [];
-  const pending = scenes.filter((s) => s.audioDurationMs === undefined && s.narration.trim() !== "").map((s) => s.id);
+/** Scenes with text but no audio yet. */
+export function pendingSceneIds(scenes: ReadonlyArray<ScriptScene>): ReadonlyArray<string> {
+  return scenes.filter((s) => s.audioDurationMs === undefined && s.narration.trim() !== "").map((s) => s.id);
+}
+
+/**
+ * Synthesizes every scene still without audio, in the background with status-bar progress.
+ * Sequential on purpose: one WebSocket at a time is kinder to an unofficial service.
+ */
+export async function synthesizeAll(): Promise<void> {
+  if (useSynthesis.getState().batch !== null) return;
+  const pending = pendingSceneIds(useProjectStore.getState().project?.manifest.scenes ?? []);
+  if (pending.length === 0) return;
   let succeeded = 0;
   for (const [index, sceneId] of pending.entries()) {
-    onProgress(index, pending.length);
+    useSynthesis.setState({ batch: { done: index, total: pending.length } });
     if (await synthesizeScene(sceneId)) succeeded += 1;
   }
-  onProgress(pending.length, pending.length);
-  return succeeded;
+  useSynthesis.setState({ batch: null });
+  if (succeeded === pending.length) notify("success", `${succeeded} narasi selesai disintesis.`);
+  else notify("warning", `${succeeded} dari ${pending.length} narasi berhasil. Lihat scene bertanda gagal.`, { label: "Coba lagi", run: () => void synthesizeAll() });
 }

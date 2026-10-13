@@ -1,7 +1,6 @@
 //! Engine commands: FFmpeg diagnostics and TTS.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use serde::Serialize;
 
@@ -15,34 +14,25 @@ use crate::tts::{self, TtsRequest, TtsResult, VoiceInfo, WordBoundary};
 
 use super::AppState;
 
-fn custom_path(value: Option<String>) -> Option<PathBuf> {
-    value.map(|v| v.trim().to_owned()).filter(|v| !v.is_empty()).map(PathBuf::from)
+/// Diagnostics for the binaries every job uses (configured custom → bundled → PATH).
+#[tauri::command]
+pub async fn check_dependencies() -> Result<DependencyReport, AppError> {
+    Ok(ffmpeg::check_dependencies(None).await)
 }
 
 #[tauri::command]
-pub async fn check_dependencies(custom_ffmpeg_path: Option<String>) -> Result<DependencyReport, AppError> {
-    Ok(ffmpeg::check_dependencies(custom_path(custom_ffmpeg_path).as_deref()).await)
-}
-
-#[tauri::command]
-pub async fn detect_encoder(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    job_id: String,
-    custom_ffmpeg_path: Option<String>,
-) -> Result<EncoderReport, AppError> {
+pub async fn detect_encoder(app: AppHandle, state: State<'_, AppState>, job_id: String) -> Result<EncoderReport, AppError> {
     let job_id = validate_job_id(&job_id)?;
-    let custom = custom_path(custom_ffmpeg_path);
     let job = Job::start(&app, &job_id, JobKind::EncoderDetection);
     let progress = |encoder: VideoEncoder| job.progress(format!("Menguji {}…", encoder.ffmpeg_name()));
     let result = async {
-        let av1 = ffmpeg::detect_encoder(custom.as_deref(), Codec::Av1, progress).await?;
-        let h264 = ffmpeg::detect_encoder(custom.as_deref(), Codec::H264, progress).await?;
+        let av1 = ffmpeg::detect_encoder(None, Codec::Av1, progress).await?;
+        let h264 = ffmpeg::detect_encoder(None, Codec::H264, progress).await?;
         Ok::<_, AppError>(EncoderReport { av1, h264 })
     }
     .await;
-    // Proxy/export jobs run the default-resolved ffmpeg, so only a detection on that binary is reusable.
-    if let (Ok(report), None) = (&result, &custom) {
+    // Same binary as proxy/export jobs, so the result is reused by them.
+    if let Ok(report) = &result {
         let mut cache = state.encoders.lock().await;
         cache.clear();
         for (codec, selected) in [(Codec::Av1, report.av1.selected), (Codec::H264, report.h264.selected)] {

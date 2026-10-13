@@ -10,6 +10,7 @@ import {
   EncoderReportSchema,
   ImportOutcomeSchema,
   OpenedProjectSchema,
+  RecentProjectSchema,
   RelinkCandidateSchema,
   SettingsViewSchema,
   TtsResultSchema,
@@ -22,6 +23,7 @@ import {
   type ImportOutcome,
   type OpenedProject,
   type PresetId,
+  type RecentProject,
   type RelinkCandidate,
   type SettingsView,
   type VoiceEngine,
@@ -58,12 +60,13 @@ async function call<S extends z.ZodType>(
   }
 }
 
-export function checkDependencies(customFfmpegPath: string | null): Promise<IpcResult<DependencyReport>> {
-  return call("check_dependencies", DependencyReportSchema, { customFfmpegPath });
+/** Diagnostics for the FFmpeg every job uses (custom from Settings → bundled → PATH). */
+export function checkDependencies(): Promise<IpcResult<DependencyReport>> {
+  return call("check_dependencies", DependencyReportSchema);
 }
 
-export function detectEncoder(jobId: string, customFfmpegPath: string | null): Promise<IpcResult<EncoderReport>> {
-  return call("detect_encoder", EncoderReportSchema, { jobId, customFfmpegPath });
+export function detectEncoder(jobId: string): Promise<IpcResult<EncoderReport>> {
+  return call("detect_encoder", EncoderReportSchema, { jobId });
 }
 
 export function ttsSynthesize(jobId: string, engine: VoiceEngine, request: TtsSynthesizeRequest): Promise<IpcResult<TtsResult>> {
@@ -91,6 +94,15 @@ export function settingsClearAzure(): Promise<IpcResult<SettingsView>> {
   return call("settings_clear_azure", SettingsViewSchema);
 }
 
+/** Native file dialog in Rust; the binary is verified before it is stored. `null` = cancelled. */
+export function settingsPickFfmpeg(): Promise<IpcResult<SettingsView | null>> {
+  return call("settings_pick_ffmpeg", SettingsViewSchema.nullable());
+}
+
+export function settingsClearFfmpeg(): Promise<IpcResult<SettingsView>> {
+  return call("settings_clear_ffmpeg", SettingsViewSchema);
+}
+
 // ---------------------------------------------------------------------------
 // Project (folders always come from native dialogs opened by Rust)
 // ---------------------------------------------------------------------------
@@ -104,6 +116,24 @@ export function projectCreate(title: string): Promise<IpcResult<OpenedProject | 
 
 export function projectOpen(): Promise<IpcResult<OpenedProject | null>> {
   return call("project_open", OpenedProjectSchema.nullable());
+}
+
+export function recentProjects(): Promise<IpcResult<ReadonlyArray<RecentProject>>> {
+  return call("recent_projects", z.array(RecentProjectSchema));
+}
+
+export function recentProjectsForget(path: string): Promise<IpcResult<null>> {
+  return call("recent_projects_forget", NullSchema, { path });
+}
+
+/** Only paths from the recent list are accepted by Rust. */
+export function projectOpenRecent(path: string): Promise<IpcResult<OpenedProject>> {
+  return call("project_open_recent", OpenedProjectSchema, { path });
+}
+
+/** Opens a project folder dropped on the window (paths captured in Rust). `null` = none in the drop. */
+export function projectOpenDropped(): Promise<IpcResult<OpenedProject | null>> {
+  return call("project_open_dropped", OpenedProjectSchema.nullable());
 }
 
 export function projectSave(manifestJson: string): Promise<IpcResult<null>> {
@@ -128,6 +158,16 @@ export function projectClose(): Promise<IpcResult<null>> {
 
 export function mediaImport(jobId: string): Promise<IpcResult<ReadonlyArray<ImportOutcome>>> {
   return call("media_import", z.array(ImportOutcomeSchema), { jobId });
+}
+
+/** Imports the media files of the last drop on the window (paths captured in Rust). */
+export function mediaImportDropped(jobId: string): Promise<IpcResult<ReadonlyArray<ImportOutcome>>> {
+  return call("media_import_dropped", z.array(ImportOutcomeSchema), { jobId });
+}
+
+/** Waveform peaks, 50 per second, 0–255. */
+export function audioPeaks(path: string): Promise<IpcResult<ReadonlyArray<number>>> {
+  return call("audio_peaks", z.array(z.number().int().min(0).max(255)), { path });
 }
 
 export function mediaCheckPaths(paths: ReadonlyArray<string>): Promise<IpcResult<ReadonlyArray<boolean>>> {

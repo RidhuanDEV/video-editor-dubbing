@@ -35,6 +35,32 @@
   --color-track-effects: var(--track-effects);
   --color-track-subtitle: var(--track-subtitle);
 
+  /* Type scale (08 §5). Minimum 12 px. */
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-ui: 13px;
+  --text-ui--line-height: 18px;
+  --text-body: 14px;
+  --text-body--line-height: 22px;
+  --text-title: 18px;
+  --text-title--line-height: 26px;
+
+  --animate-pop: pop 120ms ease-out;
+  --animate-fade: fade 150ms ease-out;
+
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+  }
+
+  @keyframes fade {
+    from {
+      opacity: 0;
+    }
+  }
+
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 10px;
@@ -69,6 +95,36 @@
   textarea,
   select {
     user-select: text;
+  }
+
+  /* Tailwind v4 preflight gives buttons the default cursor; desktop controls show a pointer. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="radio"]:not([data-disabled]),
+  [role="checkbox"]:not([data-disabled]),
+  [role="switch"]:not([data-disabled]),
+  [role="tab"]:not([data-disabled]),
+  [role="option"]:not([data-disabled]),
+  [role="menuitem"]:not([data-disabled]),
+  summary,
+  label:has(> input:not(:disabled)) {
+    cursor: pointer;
+  }
+
+  ::selection {
+    background: var(--accent-subtle);
+    color: var(--text-primary);
+  }
+
+  /* Thin, token-coloured scrollbars instead of the browser default. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-default) transparent;
+  }
+
+  img,
+  video {
+    -webkit-user-drag: none;
   }
 
   @media (prefers-reduced-motion: reduce) {

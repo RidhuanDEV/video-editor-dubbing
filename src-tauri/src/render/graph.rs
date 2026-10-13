@@ -100,12 +100,20 @@ fn hex_color(css: &str) -> String {
 }
 
 /// Narration cache path must be `cache/tts/<sha256>.mp3` inside the project.
-fn narration_path(root: &Path, relative: &str) -> Option<PathBuf> {
+pub(crate) fn narration_path(root: &Path, relative: &str) -> Option<PathBuf> {
     let name = relative.strip_prefix("cache/tts/")?.strip_suffix(".mp3")?;
     (name.len() == 64 && name.bytes().all(|b| b.is_ascii_hexdigit())).then(|| root.join("cache").join("tts").join(format!("{name}.mp3")))
 }
 
-pub fn build_plan(manifest: &Manifest, project_root: &Path, options: &PlanOptions, overlay_ass: Option<&Path>) -> Result<Plan, GraphError> {
+/// Burned-in overlay: the ASS file and the folder holding the fonts it names. Without the bundled
+/// fonts libass silently substitutes (Inter → Arial on Windows), so export would differ from preview.
+#[derive(Debug, Clone, Copy)]
+pub struct Overlay<'a> {
+    pub ass: &'a Path,
+    pub fonts_dir: Option<&'a Path>,
+}
+
+pub fn build_plan(manifest: &Manifest, project_root: &Path, options: &PlanOptions, overlay: Option<Overlay<'_>>) -> Result<Plan, GraphError> {
     if manifest.scenes.is_empty() {
         return Err(GraphError::Empty);
     }
@@ -218,9 +226,12 @@ pub fn build_plan(manifest: &Manifest, project_root: &Path, options: &PlanOption
         }
         let labels: String = (0..manifest.scenes.len()).map(|i| format!("[v{i}]")).collect();
         let _ = writeln!(graph, "{labels}concat=n={}:v=1:a=0[vcat];", manifest.scenes.len());
-        match overlay_ass {
-            Some(path) => {
-                let _ = writeln!(graph, "[vcat]ass=filename='{}'[vout];", escape_filter_path(path));
+        match overlay {
+            Some(Overlay { ass, fonts_dir: Some(fonts) }) => {
+                let _ = writeln!(graph, "[vcat]ass=filename='{}':fontsdir='{}'[vout];", escape_filter_path(ass), escape_filter_path(fonts));
+            }
+            Some(Overlay { ass, fonts_dir: None }) => {
+                let _ = writeln!(graph, "[vcat]ass=filename='{}'[vout];", escape_filter_path(ass));
             }
             None => {
                 let _ = writeln!(graph, "[vcat]null[vout];");
@@ -435,7 +446,8 @@ pub(crate) mod tests {
 
     #[test]
     fn graph_structure_is_valid() {
-        let plan = build_plan(&sample_manifest(), Path::new("C:/p"), &options(Loudnorm::Off), Some(Path::new("C:/p/cache/render/x/overlay.ass"))).expect("plan");
+        let overlay = Overlay { ass: Path::new("C:/p/cache/render/x/overlay.ass"), fonts_dir: None };
+        let plan = build_plan(&sample_manifest(), Path::new("C:/p"), &options(Loudnorm::Off), Some(overlay)).expect("plan");
         assert_labels_single_use(&plan.graph);
         let g = &plan.graph;
         // Freeze: 3.42 s narration over a 3 s clip, plus the 0.3 s gap.
@@ -449,6 +461,9 @@ pub(crate) mod tests {
         assert!(g.contains("y='clip((if(between(it,0.500,2.500),0.7500,0.5))*ih-ih/zoom/2,0,ih-ih/zoom)':d=1:s=1920x1080:fps=30[s0z];"));
         assert!(g.contains("[v0][v1]concat=n=2:v=1:a=0[vcat];"));
         assert!(g.contains("[vcat]ass=filename='C\\:/p/cache/render/x/overlay.ass'[vout];"));
+        let fonts = Overlay { ass: Path::new("C:/p/cache/render/x/overlay.ass"), fonts_dir: Some(Path::new("C:/App/fonts")) };
+        let with_fonts = build_plan(&sample_manifest(), Path::new("C:/p"), &options(Loudnorm::Off), Some(fonts)).expect("plan");
+        assert!(with_fonts.graph.contains("[vcat]ass=filename='C\\:/p/cache/render/x/overlay.ass':fontsdir='C\\:/App/fonts'[vout];"));
         // Narration delayed to scene starts; scene 2 starts at 3720 ms.
         assert!(g.contains("adelay=delays=0:all=1[n0];"));
         assert!(g.contains("adelay=delays=3720:all=1[n1];"));

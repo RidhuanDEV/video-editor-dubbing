@@ -27,7 +27,7 @@ function describe(sync: SceneSync, synthesis: SynthesisStatus | undefined): { ic
 export function SyncBadge({ sync, synthesis }: { readonly sync: SceneSync; readonly synthesis: SynthesisStatus | undefined }) {
   const { icon: Icon, text, className } = describe(sync, synthesis);
   return (
-    <span className={`inline-flex items-center gap-1 text-[12px] ${className}`}>
+    <span className={`inline-flex items-center gap-1 text-caption ${className}`}>
       <Icon size={14} strokeWidth={1.75} aria-hidden className={synthesis?.state === "loading" ? "animate-spin" : undefined} />
       <span className="tabular">{text}</span>
     </span>

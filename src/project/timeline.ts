@@ -29,8 +29,6 @@ export function videoSpanMs(scene: ScriptScene): number {
   return scene.alignmentMode === "ripple-cut" && audioMs > 0 && clipMs > audioMs ? audioMs : clipMs;
 }
 
-export const EMPTY_LAYOUT: TimelineLayout = { segments: [], bgm: [], durationMs: 0 };
-
 export function layoutTimeline(manifest: ProjectManifest): TimelineLayout {
   let cursor = 0;
   const segments = manifest.scenes.map((scene, index) => {

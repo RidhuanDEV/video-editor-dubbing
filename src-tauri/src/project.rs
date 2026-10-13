@@ -25,7 +25,8 @@ const AUTOSAVE_FILE: &str = "project.autosave.json";
 pub const PROJECT_EXTENSION: &str = "smbproj";
 pub const TTS_CACHE_DIR: &str = "cache/tts";
 pub const THUMBS_DIR: &str = "proxy/thumbs";
-const LAYOUT_DIRS: [&str; 4] = [TTS_CACHE_DIR, "cache/waveforms", THUMBS_DIR, AUTOSAVE_DIR];
+pub const WAVEFORMS_DIR: &str = "cache/waveforms";
+const LAYOUT_DIRS: [&str; 4] = [TTS_CACHE_DIR, WAVEFORMS_DIR, THUMBS_DIR, AUTOSAVE_DIR];
 /// Far above any realistic manifest; protects against loading a hostile multi-GB file.
 const MAX_MANIFEST_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_TITLE_CHARS: usize = 80;

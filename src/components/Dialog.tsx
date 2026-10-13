@@ -1,9 +1,10 @@
 /**
- * Modal dialog on the native <dialog> element: `showModal()` makes the rest of the page inert
- * (focus stays inside), Esc closes, and focus returns to the trigger on close (08 §8).
+ * Modal dialog (08 §8) on Radix Dialog: focus is trapped inside, Esc closes, focus returns to
+ * the trigger, and popovers (select, tooltip) portal above it on the same layer system.
  */
 import { X } from "lucide-react";
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { Dialog as D } from "radix-ui";
+import type { ReactNode } from "react";
 import { IconButton } from "./ui";
 
 interface DialogProps {
@@ -19,34 +20,22 @@ interface DialogProps {
 const WIDTH = { sm: "w-[420px]", md: "w-[560px]", lg: "w-[760px]" } satisfies Record<NonNullable<DialogProps["width"]>, string>;
 
 export function Dialog({ open, title, onClose, children, actions, width = "md" }: DialogProps) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const titleId = useId();
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
-  }, [open]);
-
   return (
-    <dialog
-      ref={ref}
-      aria-labelledby={titleId}
-      onCancel={(event) => {
-        event.preventDefault();
-        onClose();
-      }}
-      className={`${WIDTH[width]} max-w-[calc(100vw-32px)] rounded-lg border border-line-subtle bg-raised p-0 text-fg shadow-raised backdrop:bg-black/50`}
-    >
-      <header className="flex items-center justify-between border-b border-line-subtle px-5 py-3">
-        <h2 id={titleId} className="text-[18px] leading-[26px] font-semibold">
-          {title}
-        </h2>
-        <IconButton icon={X} label="Tutup" onClick={onClose} />
-      </header>
-      <div className="max-h-[70vh] overflow-auto px-5 py-4 text-[14px] leading-[22px]">{children}</div>
-      <footer className="flex justify-end gap-2 border-t border-line-subtle px-5 py-3">{actions}</footer>
-    </dialog>
+    <D.Root open={open} onOpenChange={(next) => !next && onClose()}>
+      <D.Portal>
+        <D.Overlay className="animate-fade fixed inset-0 z-40 bg-black/50" />
+        <D.Content
+          aria-describedby={undefined}
+          className={`${WIDTH[width]} animate-pop fixed top-1/2 left-1/2 z-40 flex max-h-[calc(100vh-64px)] max-w-[calc(100vw-32px)] -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border border-line-subtle bg-raised text-fg shadow-raised`}
+        >
+          <header className="flex shrink-0 items-center justify-between border-b border-line-subtle px-5 py-3">
+            <D.Title className="text-title font-semibold">{title}</D.Title>
+            <IconButton icon={X} label="Tutup" shortcut="Esc" onClick={onClose} />
+          </header>
+          <div className="min-h-0 overflow-auto px-5 py-4 text-body">{children}</div>
+          <footer className="flex shrink-0 justify-end gap-2 border-t border-line-subtle px-5 py-3">{actions}</footer>
+        </D.Content>
+      </D.Portal>
+    </D.Root>
   );
 }

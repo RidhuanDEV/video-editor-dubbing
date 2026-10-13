@@ -84,7 +84,7 @@ interface PreviewProps {
   readonly root: string;
   readonly layout: TimelineLayout;
   readonly cues: ReadonlyArray<Cue>;
-  /** Efek page: no zoom transform, so gizmos are drawn on the untouched frame. */
+  /** Effect editing: no zoom transform, so gizmos are drawn on the untouched frame. */
   readonly editMode?: boolean;
   /** Interactive overlay positioned over the canvas box. */
   readonly gizmo?: ReactNode;
@@ -135,9 +135,9 @@ export function Preview({ manifest, root, layout, cues, editMode = false, gizmo 
   const frameMs = 1000 / manifest.canvas.fps;
   const proxyStatus = asset ? proxies.get(asset.id) : undefined;
   const overlay = (() => {
-    if (!scene) return "Belum ada scene. Tambahkan scene di halaman Naskah.";
+    if (!scene) return "Belum ada scene. Impor rekaman lalu tempel naskah di panel kiri.";
     if (!asset) return "Klip scene ini tidak ada di media pool.";
-    if (missing.has(asset.id)) return "File sumber tidak ditemukan. Hubungkan ulang di halaman Media.";
+    if (missing.has(asset.id)) return "File sumber tidak ditemukan. Hubungkan ulang di tab Media.";
     if (proxyStatus?.state === "error") return `Proxy gagal dibuat: ${proxyStatus.message}`;
     if (!videoSrc) return proxyStatus?.state === "building" ? `Membuat proxy preview… ${proxyStatus.percent}%` : "Menyiapkan proxy preview…";
     return null;
@@ -180,7 +180,7 @@ export function Preview({ manifest, root, layout, cues, editMode = false, gizmo 
             {subtitle && <SubtitleOverlay cue={subtitle.cue} activeWord={subtitle.activeWord} settings={manifest.subtitleSettings} canvas={manifest.canvas} />}
           </div>
           {overlay && (
-            <div className="absolute inset-0 flex items-center justify-center bg-timeline/80 p-6 text-center text-[13px] text-fg">
+            <div className="absolute inset-0 flex items-center justify-center bg-timeline/80 p-6 text-center text-ui text-fg">
               {proxyStatus?.state === "building" ? (
                 <span className="inline-flex items-center gap-2">
                   <Loader2 size={16} className="animate-spin" aria-hidden /> {overlay}
@@ -193,7 +193,7 @@ export function Preview({ manifest, root, layout, cues, editMode = false, gizmo 
             </div>
           )}
           {position?.frozen && !overlay && (
-            <span className="absolute top-2 left-2 rounded-sm bg-black/60 px-1.5 py-0.5 text-[12px] text-white">Freeze</span>
+            <span className="absolute top-2 left-2 rounded-sm bg-black/60 px-1.5 py-0.5 text-caption text-white">Freeze</span>
           )}
           {gizmo}
         </div>
@@ -214,16 +214,17 @@ export function Preview({ manifest, root, layout, cues, editMode = false, gizmo 
       ))}
 
       <div className="flex items-center gap-1" role="group" aria-label="Kontrol pemutaran">
-        <IconButton icon={SkipBack} label="Ke awal (Home)" onClick={() => step(-playheadMs)} />
-        <IconButton icon={StepBack} label="Mundur 1 frame (←)" onClick={() => step(-frameMs)} />
+        <IconButton icon={SkipBack} label="Ke awal" shortcut="Home" onClick={() => step(-playheadMs)} />
+        <IconButton icon={StepBack} label="Mundur 1 frame" shortcut="←" onClick={() => step(-frameMs)} />
         <IconButton
           icon={playing ? Pause : Play}
-          label={playing ? "Jeda (Spasi)" : "Putar (Spasi)"}
+          label={playing ? "Jeda" : "Putar"}
+          shortcut="Spasi"
           onClick={() => useEditor.getState().setPlaying(!playing && layout.durationMs > 0)}
         />
-        <IconButton icon={StepForward} label="Maju 1 frame (→)" onClick={() => step(frameMs)} />
-        <IconButton icon={SkipForward} label="Ke akhir (End)" onClick={() => step(layout.durationMs - playheadMs)} />
-        <span className="ml-3 font-mono text-[13px] tabular">
+        <IconButton icon={StepForward} label="Maju 1 frame" shortcut="→" onClick={() => step(frameMs)} />
+        <IconButton icon={SkipForward} label="Ke akhir" shortcut="End" onClick={() => step(layout.durationMs - playheadMs)} />
+        <span className="ml-3 font-mono text-ui tabular">
           {formatTimecode(playheadMs)} <span className="text-fg-2">/ {formatTimecode(layout.durationMs)}</span>
         </span>
       </div>

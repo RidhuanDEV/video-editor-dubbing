@@ -20,8 +20,8 @@ It uses or bundles the third-party components below under their own licences.
   `46d899d7a02bc63237472cc4897258d5ddf274ac` and the BtbN build scripts at commit
   `63ac3265b0789ea16c7b1f8351cd2ad195a28722`, which pin the source of every bundled library.
 - **Replacing it**: the resolver order is custom path → bundled → `PATH`, so a different FFmpeg
-  can be used instead of the bundled one (the LGPL right to substitute). Today the custom path is
-  set on the Engine diagnostics page and is not yet persisted; a persistent setting is planned.
+  can be used instead of the bundled one (the LGPL right to substitute). The custom ffmpeg is
+  chosen in Settings → Video & GPU, verified, stored, and then used by every job.
   A build you supply (e.g. with `libx264`) is under its own licence and your responsibility.
 - The FFmpeg build includes **libass** (ISC), **FreeType** (FTL), **FriBidi** (LGPL),
   **HarfBuzz** (MIT), **OpenH264** (BSD-2-Clause), **libvpl** (MIT), **nv-codec-headers** (MIT)
@@ -34,7 +34,10 @@ It uses or bundles the third-party components below under their own licences.
 
 ## Fonts (bundled)
 
-- **Inter** — © The Inter Project Authors, SIL Open Font License 1.1 (`@fontsource-variable/inter`).
+- **Inter** — © The Inter Project Authors, SIL Open Font License 1.1. UI: `@fontsource-variable/inter`.
+  Export: `Inter-Regular.ttf` and `Inter-Bold.ttf` from the official Inter 4.1 release
+  (Inter-4.1.zip, SHA-256 `9883fdd4…b11e`) ship in `fonts/` and are passed to libass so burned-in
+  subtitles and badges use the same font as the preview. Licence: `licenses/Inter-OFL.txt`.
 - **JetBrains Mono** — © JetBrains s.r.o., SIL Open Font License 1.1 (`@fontsource-variable/jetbrains-mono`).
 
 ## Frontend libraries (npm, bundled into the app)
@@ -45,13 +48,16 @@ It uses or bundles the third-party components below under their own licences.
 | @tauri-apps/api, @tauri-apps/plugin-updater, @tauri-apps/plugin-process | Apache-2.0 OR MIT |
 | zod | MIT |
 | zustand | MIT |
+| radix-ui (Radix Primitives) | MIT |
+| react-resizable-panels | MIT |
+| cmdk | MIT |
 | lucide-react | ISC |
 | tailwindcss (build time) | MIT |
 
 ## Rust crates (compiled into the app)
 
-Direct dependencies: tauri, tauri-plugin-dialog, tauri-plugin-updater, tauri-plugin-process
-(Apache-2.0 OR MIT), tokio, serde, serde_json, tokio-tungstenite, reqwest, futures-util,
+Direct dependencies: tauri, tauri-plugin-dialog, tauri-plugin-updater, tauri-plugin-process,
+tauri-plugin-window-state, tauri-plugin-single-instance (Apache-2.0 OR MIT), tokio, serde, serde_json, tokio-tungstenite, reqwest, futures-util,
 async-trait, sha2, hex, uuid, chrono, httpdate, thiserror, tracing, tracing-subscriber,
 tracing-appender, keyring (MIT and/or Apache-2.0).
 The full transitive list with licence texts is generated per release with

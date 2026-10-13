@@ -84,6 +84,8 @@ async fn end_to_end(codec: Codec, ext: &str, codecs: [&str; 2]) {
             output: fx.root.join("hasil akhir.mp4"),
             encoder: Some(encoder),
             overlay_ass: Some(OVERLAY.to_owned()),
+            // The bundled fonts, as the installed app passes them.
+            fonts_dir: Some(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fonts")),
             srt: Some("1\n00:00:00,000 --> 00:00:01,000\nHalo\n".to_owned()),
         },
         rx,
@@ -166,6 +168,7 @@ async fn live_export_cancel_leaves_nothing() {
             output: fx.root.join("batal.mp4"),
             encoder: Some(encoder),
             overlay_ass: None,
+            fonts_dir: None,
             srt: None,
         },
         rx,

@@ -9,9 +9,8 @@ import { calloutPositionFor, effectTimingAt, zoomFromRect, zoomViewport, type No
 import { useEditor } from "../../project/editor";
 import { useProjectStore } from "../../project/store";
 import type { SceneSegment } from "../../project/timeline";
+import type { EffectTool } from "../../project/workspace";
 import type { BlurEffect, ProjectManifest, SceneEffect, ZoomEffect } from "../../types";
-
-export type EffectTool = "select" | "zoom" | "blur" | "callout";
 
 const MIN_DRAW = 0.02;
 
@@ -162,7 +161,7 @@ export function EffectGizmo({ manifest, segment, tool, onToolDone, content, sour
           role="group"
           aria-label={shown.type === "zoom" ? "Area zoom: seret untuk memindah" : "Area blur: seret untuk memindah"}
         >
-          <span className="pointer-events-none absolute -top-6 left-0 rounded-sm bg-black/70 px-1.5 py-0.5 text-[11px] whitespace-nowrap text-white">
+          <span className="pointer-events-none absolute -top-6 left-0 rounded-sm bg-black/70 px-1.5 py-0.5 text-caption whitespace-nowrap text-white">
             {shown.type === "zoom" ? `${shown.spotlightMask ? "Spotlight" : "Zoom"} ${shown.scale.toFixed(2)}×` : `Blur ${shown.blurStrength}`}
           </span>
           <div

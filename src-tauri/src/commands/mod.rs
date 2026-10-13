@@ -8,6 +8,7 @@ pub mod project;
 pub mod settings;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::{watch, Mutex};
@@ -32,6 +33,9 @@ pub struct AppState {
     pub encoders: Mutex<HashMap<Codec, VideoEncoder>>,
     /// Cancel handles of running exports, by job id.
     pub exports: std::sync::Mutex<HashMap<String, watch::Sender<bool>>>,
+    /// Paths of the last drop on the window, captured by the Rust window-event handler so the
+    /// webview never supplies file paths itself. Consumed by the next *_dropped command.
+    dropped: std::sync::Mutex<Vec<PathBuf>>,
 }
 
 impl AppState {
@@ -43,7 +47,16 @@ impl AppState {
             session: ProjectSession::default(),
             encoders: Mutex::new(HashMap::new()),
             exports: std::sync::Mutex::new(HashMap::new()),
+            dropped: std::sync::Mutex::new(Vec::new()),
         }
+    }
+
+    pub fn set_dropped(&self, paths: Vec<PathBuf>) {
+        *self.dropped.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = paths;
+    }
+
+    pub fn take_dropped(&self) -> Vec<PathBuf> {
+        std::mem::take(&mut *self.dropped.lock().unwrap_or_else(std::sync::PoisonError::into_inner))
     }
 
     /// Provider for a manifest engine id. Edge-TTS is unofficial, so it runs only after the
@@ -165,5 +178,16 @@ mod contract_tests {
             serde_json::to_value(RelinkCandidate { media: probed(), duration_matches: false }).expect("json"),
             json!({ "media": expected_media, "durationMatches": false })
         );
+    }
+
+    #[test]
+    fn settings_and_recent_shapes() {
+        let view = super::settings::SettingsView { edge_tts_consent: true, azure_region: None, azure_key_stored: false, custom_ffmpeg_path: Some("C:/ff/ffmpeg.exe".into()) };
+        assert_eq!(
+            serde_json::to_value(view).expect("json"),
+            json!({ "edgeTtsConsent": true, "azureRegion": null, "azureKeyStored": false, "customFfmpegPath": "C:/ff/ffmpeg.exe" })
+        );
+        let recent = super::project::RecentProjectView { path: "C:/p.smbproj".into(), title: "P".into(), opened_at: "t".into(), available: true };
+        assert_eq!(serde_json::to_value(recent).expect("json"), json!({ "path": "C:/p.smbproj", "title": "P", "openedAt": "t", "available": true }));
     }
 }

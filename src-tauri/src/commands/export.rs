@@ -2,7 +2,7 @@
 //! opened here, never from the webview.
 
 use serde::Deserialize;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::watch;
 
 use crate::dialog::{self, Filter};
@@ -108,6 +108,7 @@ pub async fn export_start(app: AppHandle, state: State<'_, AppState>, job_id: St
         output,
         encoder,
         overlay_ass: request.overlay_ass,
+        fonts_dir: bundled_fonts(&app),
         srt: request.srt,
     };
     let result = run_export(export, cancel_rx, |progress| {
@@ -126,4 +127,11 @@ pub async fn export_start(app: AppHandle, state: State<'_, AppState>, job_id: St
 pub fn export_cancel(state: State<'_, AppState>, job_id: String) -> bool {
     let exports = state.exports.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     exports.get(&job_id).is_some_and(|tx| tx.send(true).is_ok())
+}
+
+/// Fonts shipped with the app (bundle resource `fonts/`): the overlay names Inter, which most
+/// systems do not have installed. Absent in a build without the resource → system fonts.
+fn bundled_fonts(app: &AppHandle) -> Option<std::path::PathBuf> {
+    let dir = app.path().resource_dir().ok()?.join("fonts");
+    dir.is_dir().then_some(dir)
 }
