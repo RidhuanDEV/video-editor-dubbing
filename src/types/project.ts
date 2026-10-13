@@ -30,7 +30,8 @@ const ProjectRelativePath = z
 export const AspectRatioSchema = z.enum(["16:9", "9:16", "1:1", "4:3"]);
 export const FitModeSchema = z.enum(["contain", "cover", "fill"]);
 export const EncoderHardwareSchema = z.enum(["auto", "nvenc", "qsv", "amf", "videotoolbox", "openh264"]);
-export const VoiceEngineSchema = z.enum(["edge-tts", "kokoro-local", "custom-api"]);
+/** "azure-speech" added before the first release (no schema bump needed: old files stay valid). */
+export const VoiceEngineSchema = z.enum(["edge-tts", "azure-speech", "kokoro-local", "custom-api"]);
 
 export const CanvasSettingsSchema = z.object({
   width: z.number().int().min(320).max(7680),

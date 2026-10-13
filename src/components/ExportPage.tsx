@@ -14,7 +14,7 @@ import { useCues } from "../project/subtitleData";
 import { toSrt } from "../project/subtitles";
 import { formatTimecode } from "../lib/format";
 import { EMPTY_LAYOUT, layoutTimeline } from "../project/timeline";
-import { RENDER_PROGRESS_EVENT, RenderProgressSchema, type AppError, type PresetId, type RenderProgress } from "../types";
+import { RENDER_PROGRESS_EVENT, RenderProgressSchema, type AppError, type Codec, type PresetId, type RenderProgress } from "../types";
 import { Button, Card, StatusText } from "./ui";
 
 interface PresetInfo {
@@ -28,11 +28,16 @@ interface PresetInfo {
 }
 
 const PRESETS: ReadonlyArray<PresetInfo> = [
-  { id: "youtube1080", label: "YouTube 1080p", detail: "1920×1080 · 30 fps · 8 Mbps", icon: Film, size: { width: 1920, height: 1080 }, recommendedLufs: -14 },
-  { id: "youtube4k", label: "YouTube 4K", detail: "3840×2160 · 30 fps · 35 Mbps · file besar", icon: Film, size: { width: 3840, height: 2160 }, recommendedLufs: -14 },
+  { id: "youtube1080", label: "YouTube 1080p", detail: "1920×1080 · 30 fps", icon: Film, size: { width: 1920, height: 1080 }, recommendedLufs: -14 },
+  { id: "youtube4k", label: "YouTube 4K", detail: "3840×2160 · 30 fps · file besar", icon: Film, size: { width: 3840, height: 2160 }, recommendedLufs: -14 },
   { id: "shorts", label: "Shorts / TikTok", detail: "1080×1920 · 30 fps · butuh kanvas 9:16", icon: Smartphone, size: { width: 1080, height: 1920 }, recommendedLufs: -14 },
-  { id: "whatsapp", label: "WhatsApp ringan", detail: "1280×720 · 25 fps · 2 Mbps", icon: Smartphone, size: { width: 1280, height: 720 }, recommendedLufs: -16 },
-  { id: "audioOnly", label: "Audio saja", detail: "M4A (AAC 192 kbps)", icon: Music, size: null, recommendedLufs: -16 },
+  { id: "whatsapp", label: "WhatsApp ringan", detail: "1280×720 · 25 fps · ukuran kecil", icon: Smartphone, size: { width: 1280, height: 720 }, recommendedLufs: -16 },
+  { id: "audioOnly", label: "Audio saja", detail: "Tanpa video", icon: Music, size: null, recommendedLufs: -16 },
+];
+
+const CODECS: ReadonlyArray<{ readonly id: Codec; readonly label: string; readonly detail: string }> = [
+  { id: "av1", label: "AV1 + Opus (WebM)", detail: "Bebas royalti, file lebih kecil. Didukung YouTube dan browser modern." },
+  { id: "h264", label: "H.264 + AAC (MP4)", detail: "Kompatibilitas maksimum (WhatsApp, pemutar lama). Lisensi paten tanggung jawab distributor." },
 ];
 
 type ExportState =
@@ -54,6 +59,7 @@ export function ExportPage() {
   const layout = useMemo(() => (manifest ? layoutTimeline(manifest) : EMPTY_LAYOUT), [manifest]);
   const cues = useCues(layout);
   const [preset, setPreset] = useState<PresetId>("youtube1080");
+  const [codec, setCodec] = useState<Codec>("av1");
   const [burnSubtitles, setBurnSubtitles] = useState(manifest?.subtitleSettings.enabled ?? true);
   const [writeSrt, setWriteSrt] = useState(false);
   const [job, setJob] = useState<ExportState>({ state: "idle" });
@@ -99,6 +105,7 @@ export function ExportPage() {
       manifestJson: serializeManifest(manifest),
       title: manifest.title,
       preset,
+      codec,
       overlayAss: overlay,
       srt: writeSrt && cues.length > 0 ? toSrt(cues) : null,
     });
@@ -153,6 +160,29 @@ export function ExportPage() {
             );
           })}
         </div>
+        <fieldset className="space-y-2 border-t border-line-subtle pt-3" disabled={running}>
+          <legend className="panel-title mb-2">Format</legend>
+          {CODECS.map((option) => (
+            <label key={option.id} className="flex items-start gap-2 text-[13px]">
+              <input
+                type="radio"
+                name="export-codec"
+                className="mt-0.5 size-4 accent-[var(--accent)]"
+                checked={codec === option.id}
+                onChange={() => setCodec(option.id)}
+              />
+              <span>
+                <span className="block font-medium">
+                  {chosen?.size === null ? (option.id === "av1" ? "Opus (.opus)" : "AAC (.m4a)") : option.label}
+                </span>
+                <span className="block text-[12px] text-fg-2">{option.detail}</span>
+              </span>
+            </label>
+          ))}
+          {preset === "whatsapp" && codec === "av1" && (
+            <StatusText tone="warning">WhatsApp belum memutar AV1 dengan andal; pilih H.264 untuk preset ini.</StatusText>
+          )}
+        </fieldset>
         <div className="space-y-2 border-t border-line-subtle pt-3">
           <label className="flex min-h-6 items-center gap-2 text-[13px]">
             <input

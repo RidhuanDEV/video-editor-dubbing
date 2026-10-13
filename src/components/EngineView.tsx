@@ -1,22 +1,19 @@
-/**
- * Phase 0/1 engine diagnostics: FFmpeg resolver + real-encode encoder detection, and the
- * native Edge-TTS spike (WebSocket, SHA-256 cache, WordBoundary).
- */
-import { AudioLines, Cpu, SearchCheck } from "lucide-react";
-import { useId, useState, type FormEvent } from "react";
-import { checkDependencies, detectEncoder, ttsSynthesize, type IpcResult } from "../lib/ipc";
+/** Pengaturan & Engine: FFmpeg diagnostics, encoder detection (AV1 + H.264), TTS engine settings. */
+import { Cpu, SearchCheck } from "lucide-react";
+import { useId, useState } from "react";
+import { checkDependencies, detectEncoder, type IpcResult } from "../lib/ipc";
 import { newJobId, useJobProgress } from "../lib/jobs";
 import {
-  TtsSynthesizeRequestSchema,
   type AppError,
   type BinarySource,
   type DependencyReport,
   type EncoderDetection,
+  type EncoderReport,
   type FfmpegLicense,
   type ToolStatus,
-  type TtsResult,
   type VideoEncoderId,
 } from "../types";
+import { TtsSettingsCard } from "./TtsSettingsCard";
 import { Button, Card, Field, INPUT_CLASS, StatusText } from "./ui";
 
 type Remote<T> =
@@ -39,6 +36,7 @@ const ERROR_HINT: Readonly<Record<AppError["kind"], string>> = {
   binaryNotFound: "Atur path FFmpeg kustom atau pasang FFmpeg.",
   process: "Proses eksternal gagal. Lihat pesan di bawah.",
   cancelled: "Proses dibatalkan.",
+  consentRequired: "Perlu persetujuan Anda terlebih dahulu.",
 };
 
 function ErrorBox({ error }: { readonly error: AppError }) {
@@ -79,16 +77,24 @@ function ToolRow({ name, status }: { readonly name: string; readonly status: Too
   );
 }
 
-function EncoderTable({ detection }: { readonly detection: EncoderDetection }) {
+/** Software fallbacks deserve a note: OpenH264 is basic quality, SVT-AV1 is good but uses the CPU. */
+const SOFTWARE_NOTE: Readonly<Partial<Record<VideoEncoderId, string>>> = {
+  libopenh264: " — encoder software dengan kualitas dasar. Untuk kualitas lebih tinggi gunakan GPU atau FFmpeg milik sendiri.",
+  libsvtav1: " — encoder software (CPU). Kualitas baik; lebih lambat daripada encoder GPU.",
+};
+
+function EncoderTable({ title, detection }: { readonly title: string; readonly detection: EncoderDetection }) {
+  const note = detection.selected ? SOFTWARE_NOTE[detection.selected] : undefined;
   return (
     <div className="space-y-3">
+      <h3 className="panel-title">{title}</h3>
       {detection.selected ? (
-        <StatusText tone={detection.selected === "libopenh264" ? "warning" : "success"}>
+        <StatusText tone={note ? "warning" : "success"}>
           Encoder terpilih: <span className="font-mono">{detection.selected}</span>
-          {detection.selected === "libopenh264" && " — encoder software dengan kualitas dasar. Untuk kualitas lebih tinggi gunakan GPU atau FFmpeg milik sendiri."}
+          {note}
         </StatusText>
       ) : (
-        <StatusText tone="danger">Tidak ada encoder H.264 yang lolos uji. Atur path FFmpeg kustom.</StatusText>
+        <StatusText tone="danger">Tidak ada encoder yang lolos uji. Atur path FFmpeg kustom.</StatusText>
       )}
       <table className="w-full text-left text-[13px]">
         <thead className="text-[12px] text-fg-2">
@@ -124,7 +130,7 @@ function FfmpegCard({ onEncoderDetected }: { readonly onEncoderDetected: (encode
   const pathId = useId();
   const [customPath, setCustomPath] = useState("");
   const [deps, setDeps] = useState<Remote<DependencyReport>>({ state: "idle" });
-  const [encoders, setEncoders] = useState<Remote<EncoderDetection>>({ state: "idle" });
+  const [encoders, setEncoders] = useState<Remote<EncoderReport>>({ state: "idle" });
   const [detectJobId, setDetectJobId] = useState<string | null>(null);
   const detectProgress = useJobProgress(detectJobId);
   const custom = customPath.trim() === "" ? null : customPath.trim();
@@ -140,7 +146,8 @@ function FfmpegCard({ onEncoderDetected }: { readonly onEncoderDetected: (encode
     setEncoders({ state: "loading" });
     const result = await detectEncoder(jobId, custom);
     setEncoders(toRemote(result));
-    if (result.ok) onEncoderDetected(result.value.selected);
+    // The top bar shows the default export family (AV1).
+    if (result.ok) onEncoderDetected(result.value.av1.selected);
   };
 
   return (
@@ -175,86 +182,13 @@ function FfmpegCard({ onEncoderDetected }: { readonly onEncoderDetected: (encode
           {detectProgress ?? "Membaca daftar encoder…"}
         </p>
       )}
-      {encoders.state === "done" && <EncoderTable detection={encoders.value} />}
-      {encoders.state === "error" && <ErrorBox error={encoders.error} />}
-    </Card>
-  );
-}
-
-const DEFAULT_TEXT = "Selamat datang di tutorial aplikasi SUMBA. Pada video ini kita akan membuat manifest baru.";
-
-function TtsCard() {
-  const ids = { text: useId(), voice: useId(), rate: useId(), pitch: useId() };
-  const [text, setText] = useState(DEFAULT_TEXT);
-  const [voiceId, setVoiceId] = useState("id-ID-GadisNeural");
-  const [rate, setRate] = useState("+0%");
-  const [pitch, setPitch] = useState("+0Hz");
-  const [result, setResult] = useState<Remote<TtsResult>>({ state: "idle" });
-
-  const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault();
-    const request = TtsSynthesizeRequestSchema.safeParse({ text: text.trim(), voiceId: voiceId.trim(), rate, pitch, volume: "+0%" });
-    if (!request.success) {
-      setResult({ state: "error", error: { kind: "invalidRequest", message: request.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") } });
-      return;
-    }
-    setResult({ state: "loading" });
-    setResult(toRemote(await ttsSynthesize(newJobId(), request.data)));
-  };
-
-  return (
-    <Card title="Edge-TTS native (spike)">
-      <StatusText tone="warning">Edge-TTS adalah layanan tidak resmi: dapat berubah atau diblokir kapan saja.</StatusText>
-      <form className="space-y-3" onSubmit={(e) => void submit(e)}>
-        <Field id={ids.text} label="Naskah" hint={`${text.length} karakter`}>
-          <textarea
-            id={ids.text}
-            className={`${INPUT_CLASS} h-24 resize-y py-2 text-[14px] leading-[22px]`}
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
-        </Field>
-        <div className="grid grid-cols-[2fr_1fr_1fr] gap-3">
-          <Field id={ids.voice} label="Suara">
-            <input id={ids.voice} className={`${INPUT_CLASS} font-mono`} value={voiceId} onChange={(e) => setVoiceId(e.target.value)} spellCheck={false} />
-          </Field>
-          <Field id={ids.rate} label="Rate">
-            <input id={ids.rate} className={`${INPUT_CLASS} font-mono`} value={rate} onChange={(e) => setRate(e.target.value)} spellCheck={false} />
-          </Field>
-          <Field id={ids.pitch} label="Pitch">
-            <input id={ids.pitch} className={`${INPUT_CLASS} font-mono`} value={pitch} onChange={(e) => setPitch(e.target.value)} spellCheck={false} />
-          </Field>
+      {encoders.state === "done" && (
+        <div className="space-y-5">
+          <EncoderTable title="AV1 — ekspor default (bebas royalti)" detection={encoders.value.av1} />
+          <EncoderTable title="H.264 — kompatibilitas & proxy preview" detection={encoders.value.h264} />
         </div>
-        <Button type="submit" variant="primary" icon={AudioLines} loading={result.state === "loading"}>
-          Sintesis suara
-        </Button>
-      </form>
-
-      <div aria-live="polite">
-        {result.state === "error" && <ErrorBox error={result.error} />}
-        {result.state === "done" && (
-          <div className="space-y-2 text-[13px]">
-            <StatusText tone="success">
-              Selesai{result.value.cached ? " (dari cache)" : ""} — durasi{" "}
-              <span className="font-mono tabular">{(result.value.durationMs / 1000).toFixed(2)} dtk</span>,{" "}
-              {result.value.wordBoundaries.length} kata
-            </StatusText>
-            <p className="truncate font-mono text-[12px] text-fg-2" title={result.value.audioPath}>
-              {result.value.audioPath}
-            </p>
-            <p className="font-mono text-[12px] text-fg-muted">
-              job {result.value.jobId} · sha256 {result.value.sha256.slice(0, 16)}…
-            </p>
-            <ol className="flex flex-wrap gap-1.5" aria-label="Word boundary">
-              {result.value.wordBoundaries.map((w, index) => (
-                <li key={`${index}-${w.startMs}`} className="rounded-sm bg-accent-subtle px-1.5 py-0.5 text-[12px]">
-                  {w.text} <span className="font-mono tabular text-fg-2">{w.startMs}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
-        )}
-      </div>
+      )}
+      {encoders.state === "error" && <ErrorBox error={encoders.error} />}
     </Card>
   );
 }
@@ -263,7 +197,7 @@ export function EngineView({ onEncoderDetected }: { readonly onEncoderDetected: 
   return (
     <div className="mx-auto grid max-w-[1200px] gap-4 p-4 lg:grid-cols-2">
       <FfmpegCard onEncoderDetected={onEncoderDetected} />
-      <TtsCard />
+      <TtsSettingsCard />
     </div>
   );
 }

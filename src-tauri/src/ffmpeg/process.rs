@@ -127,7 +127,8 @@ pub fn error_summary(stderr: &str) -> String {
     let summary = stderr
         .lines()
         .map(strip_component_prefix)
-        .filter(|line| !line.is_empty())
+        // Some libraries (SVT-AV1) print an info banner to stderr even at -loglevel error.
+        .filter(|line| !line.is_empty() && !is_library_info(line))
         .take(MAX_LINES)
         .collect::<Vec<_>>()
         .join(" ");
@@ -135,6 +136,10 @@ pub fn error_summary(stderr: &str) -> String {
         return "tanpa keluaran error".to_owned();
     }
     summary.chars().take(MAX_CHARS).collect()
+}
+
+fn is_library_info(line: &str) -> bool {
+    line.starts_with("Svt[info]") || line.starts_with("Svt[warn]")
 }
 
 /// `[h264_nvenc @ 000002...] message` → `message` (the pointer is noise for users).
@@ -167,6 +172,12 @@ mod tests {
         assert_eq!(progress_out_ms("out_time_us=1500000"), Some(1500));
         assert_eq!(progress_out_ms("out_time_us=N/A"), None);
         assert_eq!(progress_out_ms("frame=12"), None);
+    }
+
+    #[test]
+    fn summary_skips_library_info_banners() {
+        let stderr = "Svt[info]: -------------\nSvt[info]: SVT [version]: v4.2.0\nSvt[error]: Max Bitrate only supported with CRF mode\n[libsvtav1 @ 0x1] Error setting encoder parameters\n";
+        assert_eq!(error_summary(stderr), "Svt[error]: Max Bitrate only supported with CRF mode Error setting encoder parameters");
     }
 
     #[test]

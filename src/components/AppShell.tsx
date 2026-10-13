@@ -3,7 +3,6 @@ import {
   AudioLines,
   CircleDot,
   Clapperboard,
-  Cpu,
   Lock,
   FileText,
   FolderOpen,
@@ -12,6 +11,7 @@ import {
   Redo2,
   Save,
   Scissors,
+  Settings,
   Share,
   Sparkles,
   Sun,
@@ -48,6 +48,10 @@ const ENCODER_LABEL: Readonly<Record<VideoEncoderId, string>> = {
   h264_amf: "AMF",
   h264_videotoolbox: "VideoToolbox",
   libopenh264: "OpenH264 (CPU)",
+  av1_nvenc: "AV1 NVENC",
+  av1_qsv: "AV1 Quick Sync",
+  av1_amf: "AV1 AMF",
+  libsvtav1: "SVT-AV1 (CPU)",
 };
 
 interface AppShellProps {
@@ -123,11 +127,11 @@ export function AppShell({ view, onNavigate, theme, encoder, project, children }
 
         <Button
           variant={view === "engine" ? "secondary" : "ghost"}
-          icon={Cpu}
+          icon={Settings}
           onClick={() => onNavigate("engine")}
           aria-current={view === "engine" ? "page" : undefined}
         >
-          <span className="tabular">Encoder: {encoder ? ENCODER_LABEL[encoder] : "belum dideteksi"}</span>
+          <span className="tabular">Pengaturan · {encoder ? ENCODER_LABEL[encoder] : "encoder belum dideteksi"}</span>
         </Button>
 
         <Button variant="primary" icon={Share} disabled={!project} title="Ekspor (Ctrl+E)" onClick={() => onNavigate("deliver")}>

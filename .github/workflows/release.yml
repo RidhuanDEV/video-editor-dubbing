@@ -4,11 +4,14 @@ name: Release
 # draft GitHub release.
 #
 # The pinned LGPL FFmpeg sidecar (release "ffmpeg-8.1-lgpl") is downloaded, checksum-verified
-# and bundled. NOT YET DONE (needs the owner's credentials as repository secrets):
-# - Windows Authenticode signing and macOS signing/notarization (SmartScreen / Gatekeeper).
-# - Signed auto-update (TAURI_SIGNING_PRIVATE_KEY + updater config).
-# - macOS: added to the matrix once ffmpeg-macos.yml has produced a pinned build.
-# Until then these artifacts are unsigned test builds.
+# and bundled. Update artifacts are signed with the updater key (secrets TAURI_SIGNING_PRIVATE_KEY
+# and TAURI_SIGNING_PRIVATE_KEY_PASSWORD) and latest.json is attached for the in-app updater.
+# Decisions (ADR D6): no Authenticode/Apple code signing (open-source project without budget),
+# so Windows SmartScreen asks for confirmation on first install. macOS joins the matrix once
+# ffmpeg-macos.yml has produced a pinned build.
+#
+# Publishing: the release is created as a draft. The in-app updater reads
+# releases/latest/download/latest.json, which resolves only after the owner publishes the draft.
 
 on:
   push:
@@ -47,9 +50,13 @@ jobs:
       - uses: tauri-apps/tauri-action@action-v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
+          # Turns on updater artifacts (.sig + latest.json) only for CI releases.
+          args: --config src-tauri/tauri.updater.conf.json
           tagName: ${{ github.ref_name }}
           releaseName: Script Studio ${{ github.ref_name }}
-          releaseBody: Unsigned test build. Bundles FFmpeg 8.1.3 (LGPL-3.0-or-later) as a separate program; source and provenance in the ffmpeg-8.1-lgpl release. See THIRD_PARTY_NOTICES.md.
+          releaseBody: Installer is not code-signed (Windows SmartScreen asks to confirm); in-app updates are signature-verified. Bundles FFmpeg 8.1.3 (LGPL-3.0-or-later) as a separate program; source and provenance in the ffmpeg-8.1-lgpl release. See THIRD_PARTY_NOTICES.md.
           releaseDraft: true
-          prerelease: true
+          prerelease: false

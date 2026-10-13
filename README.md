@@ -3,10 +3,13 @@
 Script-driven video editor & dubbing studio: Tauri 2 (Rust) + React 19 + TypeScript strict + Tailwind CSS v4.
 Specs live in `../../docs/desktop-editor-prd/` (PRD 00–09). Licence: Apache-2.0. FFmpeg is an LGPL sidecar (ADR D3).
 
-Status: **Phase 5 (MVP feature-complete, unsigned)** — export with presets (YouTube 1080p/4K, Shorts,
+Status: **Phase 5 (MVP feature-complete)** — export with presets (YouTube 1080p/4K, Shorts,
 WhatsApp, audio only), two-pass loudness, burned-in overlay (subtitles, badges, spotlight) or SRT sidecar,
-progress/ETA, safe cancel. Remaining for a public release: code signing, signed updater, bundling the
-pinned LGPL FFmpeg sidecar, cross-OS verification and benchmarks (see Release checklist).
+progress/ETA, safe cancel. Bundled pinned LGPL FFmpeg sidecar, signed in-app updater.
+Legal defaults (ADR D6): export defaults to royalty-free **AV1 + Opus (WebM)**, H.264 + AAC (MP4) is an
+option; Edge-TTS is opt-in behind a consent notice, Azure Speech (official, user's own key) is available.
+Installers are **not code-signed** (open-source, no certificate budget): Windows SmartScreen asks once.
+Remaining: macOS build, cross-OS verification and benchmarks (see Release checklist).
 
 ## Prerequisites
 
@@ -56,7 +59,8 @@ src-tauri/src/
   render/       model (manifest subset + timeline math), graph (filtergraph generator, golden tests),
                 export (2-pass loudnorm, presets, progress, cancel, .part → rename)
   dialog.rs     Native dialogs opened from Rust (the webview never supplies paths to write)
-  commands/     IPC: engine (deps, encoders, TTS), project, media
+  settings.rs   settings.json (Edge consent, Azure region) + Azure key in the OS keychain
+  commands/     IPC: engine (deps, encoders, TTS), project, media, export, settings
   error.rs      AppError { kind, message } crossing IPC
 ```
 
@@ -64,16 +68,19 @@ src-tauri/src/
 
 - TypeScript: zero `any`, zero `unknown` annotations, zero loose casts. External data (disk, IPC, network) is parsed with Zod.
 - FFmpeg is always invoked with an argument array, never a shell string.
-- Edge-TTS is an **unofficial** service; failures are typed (`network`, `blocked`, `timeout`, `protocol`) and shown with an action.
+- Edge-TTS is an **unofficial** service used only after consent; failures are typed (`network`, `blocked`, `timeout`, `protocol`, `consentRequired`) and shown with an action.
+- Secrets (Azure key) live only in the OS keychain; never in the manifest, settings.json or logs.
 
 ## Release checklist (owner)
 
 - [x] Pin the BtbN LGPL FFmpeg 8.1.3 build (Windows, Linux), verify, host it with its source in release `ffmpeg-8.1-lgpl`, bundle as `externalBin` (`npm run ffmpeg:fetch`).
 - [ ] macOS FFmpeg: run `.github/workflows/ffmpeg-macos.yml` once, attach the result to the release, add it to `ffmpeg.lock.json` and `release.yml`.
-- [ ] Windows code-signing certificate and macOS Developer ID + notarization as repository secrets.
-- [ ] Updater key pair (`TAURI_SIGNING_PRIVATE_KEY`) and updater endpoint.
+- [x] Code signing: decided **not** to sign (ADR D6). Windows shows SmartScreen once; macOS users must allow the app in Privacy & Security.
+- [x] Updater key pair: secrets `TAURI_SIGNING_PRIVATE_KEY` / `_PASSWORD` set; public key and endpoint in `tauri.conf.json`.
+- [ ] **Back up the updater private key** (`%USERPROFILE%\.tauri\script-studio\updater.key` + its password) somewhere safe. If it is lost, installed apps can never verify a new update.
+- [ ] Publish a release: bump the version (`tauri.conf.json`, `Cargo.toml`, `package.json`), push a tag `vX.Y.Z`, wait for `release.yml`, review the draft release, then **Publish** it. The updater only sees published releases (`releases/latest/download/latest.json`).
 - [ ] Export a 20-scene sample project on Windows, macOS and Linux; record CPU-only and GPU benchmarks (PRD 05 §6).
-- [ ] Legal review (H.264/AAC patents, Edge-TTS terms).
+- [x] Legal defaults (ADR D6): AV1/Opus default export, H.264/AAC opt-in, Edge-TTS opt-in, Azure Speech official engine. Not legal advice.
 
 ## Known environment quirk
 

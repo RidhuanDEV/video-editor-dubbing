@@ -40,7 +40,9 @@ const exeSuffix = triple.includes("windows") ? ".exe" : "";
 const outputs = ["ffmpeg", "ffprobe"].map((tool) => ({ tool, path: join(binaries, `${tool}-${triple}${exeSuffix}`) }));
 
 if (flag("--placeholder")) {
-  for (const { path } of outputs) if (!existsSync(path)) writeFileSync(path, "");
+  // tauri-build also requires the bundled licence resource to exist.
+  const licence = join(binaries, "FFMPEG-LICENSE.txt");
+  for (const path of [...outputs.map((o) => o.path), licence]) if (!existsSync(path)) writeFileSync(path, "");
   console.log(`placeholder sidecars for ${triple} (for cargo check only; not runnable)`);
   process.exit(0);
 }

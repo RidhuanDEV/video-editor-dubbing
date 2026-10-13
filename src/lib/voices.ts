@@ -1,10 +1,11 @@
 /**
- * Edge-TTS voice list, fetched once per app session. Offline or blocked: fall back to the
- * known Indonesian voices so the script panel stays usable (08 §8, offline state).
+ * Voice lists per TTS engine, fetched once per app session. When a list cannot be loaded
+ * (offline, no consent yet, Azure not configured) the known Indonesian voices keep the script
+ * panel usable (08 §8, offline state).
  */
 import { useEffect } from "react";
 import { create } from "zustand";
-import type { VoiceInfo } from "../types";
+import type { VoiceEngine, VoiceInfo } from "../types";
 import { ttsListVoices } from "./ipc";
 
 export const FALLBACK_VOICES: ReadonlyArray<VoiceInfo> = [
@@ -12,25 +13,36 @@ export const FALLBACK_VOICES: ReadonlyArray<VoiceInfo> = [
   { shortName: "id-ID-ArdiNeural", locale: "id-ID", gender: "Male", friendlyName: "Ardi (Indonesia)" },
 ];
 
-interface VoiceStore {
+export type VoiceListStatus = "idle" | "loading" | "online" | "offline";
+
+interface VoiceList {
   readonly voices: ReadonlyArray<VoiceInfo>;
-  readonly status: "idle" | "loading" | "online" | "offline";
+  readonly status: VoiceListStatus;
 }
 
-const useVoiceStore = create<VoiceStore>()(() => ({ voices: FALLBACK_VOICES, status: "idle" }));
+const IDLE: VoiceList = { voices: FALLBACK_VOICES, status: "idle" };
 
-export function useVoices(): VoiceStore {
-  const state = useVoiceStore();
+const useVoiceStore = create<{ readonly byEngine: Readonly<Partial<Record<VoiceEngine, VoiceList>>> }>()(() => ({ byEngine: {} }));
+
+function setList(engine: VoiceEngine, list: VoiceList): void {
+  useVoiceStore.setState((state) => ({ byEngine: { ...state.byEngine, [engine]: list } }));
+}
+
+/** Forget a list so it reloads (e.g. after Azure settings or Edge consent changed). */
+export function invalidateVoices(engine: VoiceEngine): void {
+  setList(engine, IDLE);
+}
+
+export function useVoices(engine: VoiceEngine): VoiceList {
+  const list = useVoiceStore((s) => s.byEngine[engine]) ?? IDLE;
   useEffect(() => {
-    if (useVoiceStore.getState().status !== "idle") return;
-    useVoiceStore.setState({ status: "loading" });
-    void ttsListVoices().then((result) => {
-      useVoiceStore.setState(
-        result.ok && result.value.length > 0 ? { voices: result.value, status: "online" } : { voices: FALLBACK_VOICES, status: "offline" },
-      );
+    if ((useVoiceStore.getState().byEngine[engine] ?? IDLE).status !== "idle") return;
+    setList(engine, { voices: FALLBACK_VOICES, status: "loading" });
+    void ttsListVoices(engine).then((result) => {
+      setList(engine, result.ok && result.value.length > 0 ? { voices: result.value, status: "online" } : { voices: FALLBACK_VOICES, status: "offline" });
     });
-  }, []);
-  return state;
+  }, [engine, list.status]);
+  return list;
 }
 
 /** Indonesian voices first, then the rest alphabetically by locale. */

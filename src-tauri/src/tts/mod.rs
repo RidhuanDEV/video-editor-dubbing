@@ -1,10 +1,12 @@
 //! TTS abstraction (01 §2.1). Edge-TTS is unofficial and may break or be blocked at any time,
 //! so engines sit behind `TtsProvider` and every failure is a typed `TtsError`.
 
+mod azure;
 mod cache;
 mod edge;
 
 pub use cache::{read_word_boundaries, synthesize_cached, TtsResult};
+pub use azure::AzureSpeechProvider;
 pub use edge::EdgeTtsProvider;
 
 use async_trait::async_trait;

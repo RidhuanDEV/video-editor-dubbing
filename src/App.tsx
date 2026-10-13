@@ -13,6 +13,8 @@ import { ScriptPage } from "./components/ScriptPage";
 import { StartScreen } from "./components/StartScreen";
 import { Button } from "./components/ui";
 import { notify } from "./lib/notices";
+import { useSettings, useSettingsLoader } from "./lib/settings";
+import { dismissUpdate, installUpdate, useUpdateCheck, useUpdater } from "./lib/updater";
 import { useTheme } from "./lib/theme";
 import { resetEditor } from "./project/editor";
 import { useProxyBuilder } from "./project/proxies";
@@ -92,9 +94,14 @@ export function App() {
   const undoLabel = useProjectStore((s) => s.past[s.past.length - 1]?.label ?? null);
   const redoLabel = useProjectStore((s) => s.future[0]?.label ?? null);
   const pendingRecovery = useSessionUi((s) => s.pendingRecovery);
+  const pendingConsent = useSettings((s) => s.pendingConsent);
+  const update = useUpdater((s) => s.available);
+  const updateProgress = useUpdater((s) => s.progress);
 
   const root = project?.root ?? null;
 
+  useSettingsLoader();
+  useUpdateCheck();
   useAutosave();
   useProxyBuilder();
   useProjectShortcuts(useCallback(() => setView("deliver"), []));
@@ -139,6 +146,70 @@ export function App() {
         {content}
       </AppShell>
       <Notices />
+
+      <Dialog
+        open={update !== null}
+        title={`Versi ${update?.version ?? ""} tersedia`}
+        width="sm"
+        onClose={() => updateProgress === null && dismissUpdate()}
+        actions={
+          <>
+            <Button onClick={dismissUpdate} disabled={updateProgress !== null}>
+              Nanti
+            </Button>
+            <Button
+              variant="primary"
+              loading={updateProgress !== null}
+              onClick={() => {
+                // Never lose work to the restart: save first, abort the update if saving fails.
+                void (async () => {
+                  if (useProjectStore.getState().project && isDirty(useProjectStore.getState()) && !(await saveProject())) return;
+                  await installUpdate();
+                })();
+              }}
+            >
+              {updateProgress === null ? "Perbarui & mulai ulang" : `Mengunduh… ${updateProgress}%`}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-2">
+          <p>Pembaruan ditandatangani dan diverifikasi sebelum dipasang. Proyek yang belum disimpan akan disimpan dulu.</p>
+          {update?.notes && <p className="max-h-40 overflow-auto rounded-sm bg-surface p-2 text-[12px] whitespace-pre-wrap text-fg-2">{update.notes}</p>}
+        </div>
+      </Dialog>
+
+      <Dialog
+        open={pendingConsent !== null}
+        title="Pakai Edge-TTS?"
+        width="md"
+        onClose={() => pendingConsent?.(false)}
+        actions={
+          <>
+            <Button
+              onClick={() => {
+                pendingConsent?.(false);
+                setView("engine");
+              }}
+            >
+              Atur Azure Speech
+            </Button>
+            <Button variant="primary" onClick={() => pendingConsent?.(true)}>
+              Saya mengerti, lanjutkan
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-2">
+          <p>Edge-TTS memakai layanan baca-keras Microsoft Edge lewat klien <strong>tidak resmi</strong>.</p>
+          <ul className="list-disc space-y-1 pl-5 text-[13px]">
+            <li>Teks naskah dikirim ke server Microsoft untuk diubah menjadi suara.</li>
+            <li>Layanan dapat berubah atau diblokir kapan saja tanpa pemberitahuan.</li>
+            <li>Ketentuan untuk penggunaan komersial tidak jelas; untuk karya komersial gunakan Azure Speech (resmi).</li>
+          </ul>
+          <p className="text-[12px] text-fg-2">Persetujuan dapat dicabut kapan saja di Pengaturan.</p>
+        </div>
+      </Dialog>
 
       <Dialog
         open={pendingRecovery !== null}

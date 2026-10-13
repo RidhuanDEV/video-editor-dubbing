@@ -9,7 +9,8 @@ use crate::dialog::{self, Filter};
 use crate::error::{AppError, ErrorKind};
 use crate::jobs::{validate_job_id, Job, JobKind};
 use crate::project::safe_file_stem;
-use crate::render::export::{run_export, ExportError, ExportJob, PresetId};
+use crate::ffmpeg::Codec;
+use crate::render::export::{extension, run_export, ExportError, ExportJob, PresetId};
 use crate::render::model::Manifest;
 
 use super::AppState;
@@ -24,6 +25,8 @@ pub struct ExportRequest {
     pub manifest_json: String,
     pub title: String,
     pub preset: PresetId,
+    /// AV1 + Opus (default, royalty-free) or H.264 + AAC (compatibility).
+    pub codec: Codec,
     /// Subtitles/badges/spotlight overlay, burned in when present.
     pub overlay_ass: Option<String>,
     /// Sidecar `.srt` written next to the output when present.
@@ -69,18 +72,19 @@ pub async fn export_start(app: AppHandle, state: State<'_, AppState>, job_id: St
         return Err(AppError::new(ErrorKind::InvalidRequest, "Ekspor lain sedang berjalan."));
     }
 
-    let extension = request.preset.extension();
+    let extension = extension(request.preset, request.codec);
     let default_name = format!("{}.{extension}", safe_file_stem(&request.title));
-    let filter = if extension == "m4a" {
-        Filter { name: "Audio M4A", extensions: &["m4a"] }
-    } else {
-        Filter { name: "Video MP4", extensions: &["mp4"] }
+    let filter = match extension {
+        "opus" => Filter { name: "Audio Opus", extensions: &["opus"] },
+        "m4a" => Filter { name: "Audio M4A", extensions: &["m4a"] },
+        "webm" => Filter { name: "Video WebM", extensions: &["webm"] },
+        _ => Filter { name: "Video MP4", extensions: &["mp4"] },
     };
     let Some(output) = dialog::save_file(&app, "Simpan hasil ekspor", &default_name, &filter).await else {
         return Ok(None);
     };
     let encoder = match request.preset.preset() {
-        Some(_) => Some(state.encoder().await?),
+        Some(_) => Some(state.encoder(request.codec).await?),
         None => None,
     };
 
@@ -100,6 +104,7 @@ pub async fn export_start(app: AppHandle, state: State<'_, AppState>, job_id: St
         project_root: &root,
         manifest,
         preset: request.preset,
+        codec: request.codec,
         output,
         encoder,
         overlay_ass: request.overlay_ass,

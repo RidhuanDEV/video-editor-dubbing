@@ -4,6 +4,8 @@
  */
 import { create } from "zustand";
 import { ttsSynthesize } from "../lib/ipc";
+import { requestEdgeConsent } from "../lib/settings";
+import { invalidateVoices } from "../lib/voices";
 import { newJobId } from "../lib/jobs";
 import type { AppError, ScriptScene, VoiceConfig } from "../types";
 import { effectiveVoice } from "./commands";
@@ -27,7 +29,7 @@ function setStatus(sceneId: string, status: SynthesisStatus | null): void {
 }
 
 function signature(scene: ScriptScene, voice: VoiceConfig): string {
-  return JSON.stringify([scene.narration, voice.voiceId, voice.rate, voice.pitch, voice.volume]);
+  return JSON.stringify([scene.narration, voice.engine, voice.voiceId, voice.rate, voice.pitch, voice.volume]);
 }
 
 export async function synthesizeScene(sceneId: string): Promise<boolean> {
@@ -42,13 +44,15 @@ export async function synthesizeScene(sceneId: string): Promise<boolean> {
   const voice = effectiveVoice(project.manifest, scene);
   const requested = signature(scene, voice);
   setStatus(sceneId, { state: "loading" });
-  const result = await ttsSynthesize(newJobId(), {
-    text: scene.narration,
-    voiceId: voice.voiceId,
-    rate: voice.rate,
-    pitch: voice.pitch,
-    volume: voice.volume,
-  });
+  const request = { text: scene.narration, voiceId: voice.voiceId, rate: voice.rate, pitch: voice.pitch, volume: voice.volume };
+  let result = await ttsSynthesize(newJobId(), voice.engine, request);
+  // Edge-TTS needs explicit consent once (ADR D6): ask, then retry a single time.
+  if (!result.ok && result.error.kind === "consentRequired") {
+    if (await requestEdgeConsent()) {
+      invalidateVoices("edge-tts");
+      result = await ttsSynthesize(newJobId(), voice.engine, request);
+    }
+  }
 
   if (!result.ok) {
     setStatus(sceneId, { state: "error", error: result.error });

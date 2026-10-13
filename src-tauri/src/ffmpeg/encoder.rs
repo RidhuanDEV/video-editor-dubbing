@@ -1,11 +1,12 @@
-//! Hardware encoder detection (05 §2). Being listed in `ffmpeg -encoders` is not enough —
-//! the driver/GPU may be absent — so every listed candidate gets a real one-frame test encode.
-//! Chain: NVENC / QSV / AMF / VideoToolbox → libopenh264 (software, LGPL-compatible).
+//! Encoder detection (05 §2). Being listed in `ffmpeg -encoders` is not enough — the
+//! driver/GPU may be absent — so every listed candidate gets a real one-frame test encode.
+//! Two families (ADR D6): AV1 (default export, royalty-free) and H.264 (compatibility option,
+//! preview proxies). Each chain tries hardware first and ends with an LGPL software encoder.
 
 use std::path::Path;
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::process::{error_summary, run};
 use super::resolver::resolve;
@@ -14,6 +15,13 @@ use super::{FfmpegError, Tool};
 const LIST_TIMEOUT: Duration = Duration::from_secs(15);
 /// First NVENC/AMF init can take several seconds on a cold driver.
 const TEST_ENCODE_TIMEOUT: Duration = Duration::from_secs(20);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Codec {
+    H264,
+    Av1,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum VideoEncoder {
@@ -27,12 +35,24 @@ pub enum VideoEncoder {
     VideoToolbox,
     #[serde(rename = "libopenh264")]
     OpenH264,
+    #[serde(rename = "av1_nvenc")]
+    Av1Nvenc,
+    #[serde(rename = "av1_qsv")]
+    Av1Qsv,
+    #[serde(rename = "av1_amf")]
+    Av1Amf,
+    #[serde(rename = "libsvtav1")]
+    SvtAv1,
 }
 
 impl VideoEncoder {
-    /// Priority order: hardware first, software fallback last.
-    pub const CHAIN: [VideoEncoder; 5] =
-        [VideoEncoder::Nvenc, VideoEncoder::Qsv, VideoEncoder::Amf, VideoEncoder::VideoToolbox, VideoEncoder::OpenH264];
+    /// Priority per family: hardware first, software fallback last.
+    pub const fn chain(codec: Codec) -> &'static [VideoEncoder] {
+        match codec {
+            Codec::H264 => &[VideoEncoder::Nvenc, VideoEncoder::Qsv, VideoEncoder::Amf, VideoEncoder::VideoToolbox, VideoEncoder::OpenH264],
+            Codec::Av1 => &[VideoEncoder::Av1Nvenc, VideoEncoder::Av1Qsv, VideoEncoder::Av1Amf, VideoEncoder::SvtAv1],
+        }
+    }
 
     pub const fn ffmpeg_name(self) -> &'static str {
         match self {
@@ -41,17 +61,28 @@ impl VideoEncoder {
             VideoEncoder::Amf => "h264_amf",
             VideoEncoder::VideoToolbox => "h264_videotoolbox",
             VideoEncoder::OpenH264 => "libopenh264",
+            VideoEncoder::Av1Nvenc => "av1_nvenc",
+            VideoEncoder::Av1Qsv => "av1_qsv",
+            VideoEncoder::Av1Amf => "av1_amf",
+            VideoEncoder::SvtAv1 => "libsvtav1",
+        }
+    }
+
+    pub const fn codec(self) -> Codec {
+        match self {
+            VideoEncoder::Nvenc | VideoEncoder::Qsv | VideoEncoder::Amf | VideoEncoder::VideoToolbox | VideoEncoder::OpenH264 => Codec::H264,
+            VideoEncoder::Av1Nvenc | VideoEncoder::Av1Qsv | VideoEncoder::Av1Amf | VideoEncoder::SvtAv1 => Codec::Av1,
         }
     }
 
     pub const fn is_hardware(self) -> bool {
-        !matches!(self, VideoEncoder::OpenH264)
+        !matches!(self, VideoEncoder::OpenH264 | VideoEncoder::SvtAv1)
     }
 
-    /// Hardware encoders take NV12; libopenh264 only accepts planar YUV 4:2:0.
+    /// Hardware encoders take NV12; the software encoders take planar YUV 4:2:0.
     pub const fn pixel_format(self) -> &'static str {
         match self {
-            VideoEncoder::OpenH264 => "yuv420p",
+            VideoEncoder::OpenH264 | VideoEncoder::SvtAv1 => "yuv420p",
             _ => "nv12",
         }
     }
@@ -76,6 +107,7 @@ pub struct EncoderDetection {
 /// `on_probe` is called before each real test encode (UI progress; one probe can take seconds).
 pub async fn detect_encoder(
     custom_ffmpeg: Option<&Path>,
+    codec: Codec,
     on_probe: impl Fn(VideoEncoder) + Send,
 ) -> Result<EncoderDetection, FfmpegError> {
     let ffmpeg = resolve(Tool::Ffmpeg, custom_ffmpeg)?;
@@ -86,8 +118,9 @@ pub async fn detect_encoder(
     let available = listed_encoders(&listing.stdout);
 
     // Sequential on purpose: parallel GPU session inits can fail spuriously on consumer drivers.
-    let mut candidates = Vec::with_capacity(VideoEncoder::CHAIN.len());
-    for encoder in VideoEncoder::CHAIN {
+    let chain = VideoEncoder::chain(codec);
+    let mut candidates = Vec::with_capacity(chain.len());
+    for &encoder in chain {
         let listed = available.iter().any(|name| name == encoder.ffmpeg_name());
         let (test_passed, error) = if listed {
             on_probe(encoder);
@@ -168,16 +201,23 @@ mod tests {
     #[tokio::test]
     #[ignore = "machine-specific: needs ffmpeg and runs real test encodes"]
     async fn live_detect_encoder() {
-        let detection = detect_encoder(None, |e| println!("probing {}", e.ffmpeg_name())).await.expect("detection");
-        for c in &detection.candidates {
-            println!("{:<18} listed={} passed={} error={:?}", c.encoder.ffmpeg_name(), c.listed, c.test_passed, c.error);
+        for codec in [Codec::H264, Codec::Av1] {
+            let detection = detect_encoder(None, codec, |e| println!("probing {}", e.ffmpeg_name())).await.expect("detection");
+            for c in &detection.candidates {
+                println!("{:<18} listed={} passed={} error={:?}", c.encoder.ffmpeg_name(), c.listed, c.test_passed, c.error);
+            }
+            println!("{codec:?} selected={:?}", detection.selected.map(VideoEncoder::ffmpeg_name));
         }
-        println!("selected={:?}", detection.selected.map(VideoEncoder::ffmpeg_name));
     }
 
     #[test]
-    fn chain_ends_with_software_fallback() {
-        assert_eq!(VideoEncoder::CHAIN.last().copied(), Some(VideoEncoder::OpenH264));
-        assert!(VideoEncoder::CHAIN[..4].iter().all(|e| e.is_hardware()));
+    fn chains_end_with_software_fallback() {
+        for codec in [Codec::H264, Codec::Av1] {
+            let chain = VideoEncoder::chain(codec);
+            let (last, hardware) = chain.split_last().expect("non-empty chain");
+            assert!(!last.is_hardware(), "{codec:?} must end with a software encoder");
+            assert!(hardware.iter().all(|e| e.is_hardware() && e.codec() == codec));
+        }
+        assert_eq!(VideoEncoder::chain(Codec::Av1).last().copied(), Some(VideoEncoder::SvtAv1));
     }
 }

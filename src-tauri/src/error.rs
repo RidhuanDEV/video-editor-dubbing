@@ -6,6 +6,7 @@ use serde::Serialize;
 use crate::ffmpeg::FfmpegError;
 use crate::media::MediaError;
 use crate::project::ProjectError;
+use crate::settings::SettingsError;
 use crate::tts::TtsError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -20,6 +21,8 @@ pub enum ErrorKind {
     BinaryNotFound,
     Process,
     Cancelled,
+    /// An action needs the user's explicit consent first (e.g. Edge-TTS notice).
+    ConsentRequired,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -79,5 +82,15 @@ impl From<MediaError> for AppError {
             MediaError::Unsupported(_) => Self::new(ErrorKind::InvalidRequest, err.to_string()),
             MediaError::BadProbe(_) => Self::new(ErrorKind::Process, err.to_string()),
         }
+    }
+}
+
+impl From<SettingsError> for AppError {
+    fn from(err: SettingsError) -> Self {
+        let kind = match &err {
+            SettingsError::Io(_) | SettingsError::Keychain(_) => ErrorKind::Io,
+            SettingsError::Invalid(_) => ErrorKind::InvalidRequest,
+        };
+        Self::new(kind, err.to_string())
     }
 }

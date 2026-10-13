@@ -143,7 +143,8 @@ pub async fn media_build_proxy(
         return Err(AppError::new(ErrorKind::InvalidRequest, "file sumber tidak ditemukan"));
     }
     let encoder = match kind {
-        proxy::ProxyKind::Video => Some(state.encoder().await?),
+        // Proxies are internal preview files, never distributed: H.264 for fast seeking.
+        proxy::ProxyKind::Video => Some(state.encoder(crate::ffmpeg::Codec::H264).await?),
         proxy::ProxyKind::Audio => None,
     };
 

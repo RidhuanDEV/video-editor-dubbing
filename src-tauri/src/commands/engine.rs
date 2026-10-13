@@ -3,10 +3,12 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+use serde::Serialize;
+
 use tauri::{AppHandle, Manager, State};
 
 use crate::error::{AppError, ErrorKind};
-use crate::ffmpeg::{self, DependencyReport, EncoderDetection};
+use crate::ffmpeg::{self, Codec, DependencyReport, EncoderDetection, VideoEncoder};
 use crate::jobs::{validate_job_id, Job, JobKind};
 use crate::project::TTS_CACHE_DIR;
 use crate::tts::{self, TtsRequest, TtsResult, VoiceInfo, WordBoundary};
@@ -28,20 +30,35 @@ pub async fn detect_encoder(
     state: State<'_, AppState>,
     job_id: String,
     custom_ffmpeg_path: Option<String>,
-) -> Result<EncoderDetection, AppError> {
+) -> Result<EncoderReport, AppError> {
     let job_id = validate_job_id(&job_id)?;
     let custom = custom_path(custom_ffmpeg_path);
     let job = Job::start(&app, &job_id, JobKind::EncoderDetection);
-    let result = ffmpeg::detect_encoder(custom.as_deref(), |encoder| {
-        job.progress(format!("Menguji {}…", encoder.ffmpeg_name()));
-    })
-    .await
-    .map_err(AppError::from);
-    // Proxy jobs run the default-resolved ffmpeg, so only a detection on that binary is reusable.
-    if let (Ok(detection), None) = (&result, &custom) {
-        *state.encoder.lock().await = detection.selected;
+    let progress = |encoder: VideoEncoder| job.progress(format!("Menguji {}…", encoder.ffmpeg_name()));
+    let result = async {
+        let av1 = ffmpeg::detect_encoder(custom.as_deref(), Codec::Av1, progress).await?;
+        let h264 = ffmpeg::detect_encoder(custom.as_deref(), Codec::H264, progress).await?;
+        Ok::<_, AppError>(EncoderReport { av1, h264 })
+    }
+    .await;
+    // Proxy/export jobs run the default-resolved ffmpeg, so only a detection on that binary is reusable.
+    if let (Ok(report), None) = (&result, &custom) {
+        let mut cache = state.encoders.lock().await;
+        cache.clear();
+        for (codec, selected) in [(Codec::Av1, report.av1.selected), (Codec::H264, report.h264.selected)] {
+            if let Some(encoder) = selected {
+                cache.insert(codec, encoder);
+            }
+        }
     }
     job.finish(result)
+}
+
+/// Both families: AV1 is the default export (ADR D6), H.264 the compatibility option and proxies.
+#[derive(Debug, Serialize)]
+pub struct EncoderReport {
+    pub av1: EncoderDetection,
+    pub h264: EncoderDetection,
 }
 
 #[tauri::command]
@@ -49,9 +66,11 @@ pub async fn tts_synthesize(
     app: AppHandle,
     state: State<'_, AppState>,
     job_id: String,
+    engine: String,
     request: TtsRequest,
 ) -> Result<TtsResult, AppError> {
     let job_id = validate_job_id(&job_id)?;
+    let provider = state.provider(&engine).await?;
     let job = Job::start(&app, &job_id, JobKind::Tts);
     // Audio belongs to the open project (cache/tts); without a project, the app cache is used.
     let cache_dir = match state.session.root() {
@@ -63,15 +82,15 @@ pub async fn tts_synthesize(
             .map_err(|e| AppError::new(ErrorKind::Io, format!("folder cache aplikasi: {e}"))),
     };
     let result = match cache_dir {
-        Ok(dir) => tts::synthesize_cached(state.tts.as_ref(), &request, &dir, job_id.clone()).await.map_err(AppError::from),
+        Ok(dir) => tts::synthesize_cached(provider.as_ref(), &request, &dir, job_id.clone()).await.map_err(AppError::from),
         Err(err) => Err(err),
     };
     job.finish(result)
 }
 
 #[tauri::command]
-pub async fn tts_list_voices(state: State<'_, AppState>) -> Result<Vec<VoiceInfo>, AppError> {
-    Ok(state.tts.list_voices().await?)
+pub async fn tts_list_voices(state: State<'_, AppState>, engine: String) -> Result<Vec<VoiceInfo>, AppError> {
+    Ok(state.provider(&engine).await?.list_voices().await?)
 }
 
 const MAX_BOUNDARY_LOOKUPS: usize = 5_000;

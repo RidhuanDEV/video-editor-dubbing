@@ -7,20 +7,24 @@ import { z } from "zod";
 import {
   AppErrorSchema,
   DependencyReportSchema,
-  EncoderDetectionSchema,
+  EncoderReportSchema,
   ImportOutcomeSchema,
   OpenedProjectSchema,
   RelinkCandidateSchema,
+  SettingsViewSchema,
   TtsResultSchema,
   VoiceListSchema,
   WordBoundarySchema,
   type AppError,
   type DependencyReport,
-  type EncoderDetection,
+  type Codec,
+  type EncoderReport,
   type ImportOutcome,
   type OpenedProject,
   type PresetId,
   type RelinkCandidate,
+  type SettingsView,
+  type VoiceEngine,
   type TtsResult,
   type TtsSynthesizeRequest,
   type VoiceInfo,
@@ -58,16 +62,33 @@ export function checkDependencies(customFfmpegPath: string | null): Promise<IpcR
   return call("check_dependencies", DependencyReportSchema, { customFfmpegPath });
 }
 
-export function detectEncoder(jobId: string, customFfmpegPath: string | null): Promise<IpcResult<EncoderDetection>> {
-  return call("detect_encoder", EncoderDetectionSchema, { jobId, customFfmpegPath });
+export function detectEncoder(jobId: string, customFfmpegPath: string | null): Promise<IpcResult<EncoderReport>> {
+  return call("detect_encoder", EncoderReportSchema, { jobId, customFfmpegPath });
 }
 
-export function ttsSynthesize(jobId: string, request: TtsSynthesizeRequest): Promise<IpcResult<TtsResult>> {
-  return call("tts_synthesize", TtsResultSchema, { jobId, request });
+export function ttsSynthesize(jobId: string, engine: VoiceEngine, request: TtsSynthesizeRequest): Promise<IpcResult<TtsResult>> {
+  return call("tts_synthesize", TtsResultSchema, { jobId, engine, request });
 }
 
-export function ttsListVoices(): Promise<IpcResult<ReadonlyArray<VoiceInfo>>> {
-  return call("tts_list_voices", VoiceListSchema);
+export function ttsListVoices(engine: VoiceEngine): Promise<IpcResult<ReadonlyArray<VoiceInfo>>> {
+  return call("tts_list_voices", VoiceListSchema, { engine });
+}
+
+export function settingsGet(): Promise<IpcResult<SettingsView>> {
+  return call("settings_get", SettingsViewSchema);
+}
+
+export function settingsSetEdgeConsent(consent: boolean): Promise<IpcResult<SettingsView>> {
+  return call("settings_set_edge_consent", SettingsViewSchema, { consent });
+}
+
+/** Verifies the key with Azure before storing it in the OS keychain; returns the voice count. */
+export function settingsSetAzure(region: string, key: string): Promise<IpcResult<number>> {
+  return call("settings_set_azure", z.number().int().nonnegative(), { region, key });
+}
+
+export function settingsClearAzure(): Promise<IpcResult<SettingsView>> {
+  return call("settings_clear_azure", SettingsViewSchema);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,6 +170,7 @@ export interface ExportRequest {
   readonly manifestJson: string;
   readonly title: string;
   readonly preset: PresetId;
+  readonly codec: Codec;
   readonly overlayAss: string | null;
   readonly srt: string | null;
 }

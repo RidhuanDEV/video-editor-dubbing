@@ -8,6 +8,7 @@ mod media;
 mod project;
 mod proxy;
 mod render;
+mod settings;
 mod tts;
 
 use std::sync::Arc;
@@ -21,10 +22,13 @@ use crate::tts::EdgeTtsProvider;
 pub fn run() {
     let result = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let log_guard = logging::init(&app.path().app_log_dir()?)?;
             app.manage(log_guard);
-            app.manage(AppState::new(Arc::new(EdgeTtsProvider::new()?)));
+            let settings = settings::SettingsStore::load(&app.path().app_config_dir()?);
+            app.manage(AppState::new(Arc::new(EdgeTtsProvider::new()?), settings));
             tracing::info!(version = env!("CARGO_PKG_VERSION"), "app started");
             Ok(())
         })
@@ -47,6 +51,10 @@ pub fn run() {
             commands::media::media_build_proxy,
             commands::export::export_start,
             commands::export::export_cancel,
+            commands::settings::settings_get,
+            commands::settings::settings_set_edge_consent,
+            commands::settings::settings_set_azure,
+            commands::settings::settings_clear_azure,
         ])
         .run(tauri::generate_context!());
 

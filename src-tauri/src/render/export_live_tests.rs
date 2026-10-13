@@ -53,15 +53,25 @@ async fn fixture() -> Fixture {
 
 const OVERLAY: &str = "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,42,&H00FFFFFF,&H00FFFFFF,&HFF000000,&H5F000000,0,0,0,0,100,100,0,0,4,8,0,2,60,60,64,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,Selamat datang\n";
 
-async fn encoder() -> VideoEncoder {
-    crate::ffmpeg::detect_encoder(None, |_| {}).await.expect("detect").selected.expect("encoder")
+async fn encoder(codec: Codec) -> VideoEncoder {
+    crate::ffmpeg::detect_encoder(None, codec, |_| {}).await.expect("detect").selected.expect("encoder")
 }
 
 #[tokio::test]
 #[ignore = "machine-specific: full encode with the local ffmpeg"]
-async fn live_export_end_to_end() {
+async fn live_export_end_to_end_av1() {
+    end_to_end(Codec::Av1, "webm", ["av1", "opus"]).await;
+}
+
+#[tokio::test]
+#[ignore = "machine-specific: full encode with the local ffmpeg"]
+async fn live_export_end_to_end_h264() {
+    end_to_end(Codec::H264, "mp4", ["h264", "aac"]).await;
+}
+
+async fn end_to_end(codec: Codec, ext: &str, codecs: [&str; 2]) {
     let fx = fixture().await;
-    let encoder = encoder().await;
+    let encoder = encoder(codec).await;
     let (_tx, rx) = watch::channel(false);
     let mut last = 0.0;
     let output = run_export(
@@ -70,6 +80,7 @@ async fn live_export_end_to_end() {
             project_root: &fx.root,
             manifest: fx.manifest.clone(),
             preset: PresetId::Youtube1080,
+            codec,
             output: fx.root.join("hasil akhir.mp4"),
             encoder: Some(encoder),
             overlay_ass: Some(OVERLAY.to_owned()),
@@ -81,9 +92,10 @@ async fn live_export_end_to_end() {
     .await
     .expect("export");
 
-    assert!(output.is_file() && output.ends_with("hasil akhir.mp4"));
+    // The extension follows the codec family even if the dialog suggested another one.
+    assert!(output.is_file() && output.ends_with(format!("hasil akhir.{ext}")), "{}", output.display());
     assert!(fx.root.join("hasil akhir.srt").is_file());
-    assert!(!fx.root.join("hasil akhir.part.mp4").exists());
+    assert!(!fx.root.join(format!("hasil akhir.part.{ext}")).exists());
     assert!(!fx.root.join("cache/render/live").exists(), "work dir cleaned");
     println!("encoder={} last progress={last:.1}%", encoder.ffmpeg_name());
 
@@ -97,7 +109,9 @@ async fn live_export_end_to_end() {
     .await
     .expect("probe");
     println!("{}", probe.stdout);
-    assert!(probe.stdout.contains("\"codec_name\": \"h264\"") && probe.stdout.contains("\"codec_name\": \"aac\""));
+    for name in codecs {
+        assert!(probe.stdout.contains(&format!("\"codec_name\": \"{name}\"")), "missing {name}");
+    }
     assert!(probe.stdout.contains("\"width\": 1920") && probe.stdout.contains("\"height\": 1080"));
     let duration: f64 = probe
         .stdout
@@ -125,7 +139,7 @@ async fn live_export_end_to_end() {
 
     // Frames for visual inspection: blur active (0.5 s) and zoom peak (1.5 s).
     for (t, name) in [("0.5", "frame-blur.png"), ("1.5", "frame-zoom.png")] {
-        let target = std::env::temp_dir().join(format!("script-studio-{name}")).to_string_lossy().into_owned();
+        let target = std::env::temp_dir().join(format!("script-studio-{ext}-{name}")).to_string_lossy().into_owned();
         let _ = run(&ffmpeg.path, &["-y", "-loglevel", "error", "-ss", t, "-i", &out, "-frames:v", "1", "-update", "1", &target], Duration::from_secs(30)).await;
     }
 }
@@ -134,7 +148,7 @@ async fn live_export_end_to_end() {
 #[ignore = "machine-specific: full encode with the local ffmpeg"]
 async fn live_export_cancel_leaves_nothing() {
     let fx = fixture().await;
-    let encoder = encoder().await;
+    let encoder = encoder(Codec::H264).await;
     let (tx, rx) = watch::channel(false);
     tokio::spawn(async move {
         tokio::time::sleep(Duration::from_millis(400)).await;
@@ -148,6 +162,7 @@ async fn live_export_cancel_leaves_nothing() {
             project_root: &fx.root,
             manifest,
             preset: PresetId::Youtube4k,
+            codec: Codec::H264,
             output: fx.root.join("batal.mp4"),
             encoder: Some(encoder),
             overlay_ass: None,

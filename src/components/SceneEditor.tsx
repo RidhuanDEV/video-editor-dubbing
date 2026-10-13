@@ -8,7 +8,7 @@ import { fileNameOf } from "../project/manifest";
 import { estimateNarrationMs, formatSeconds, sceneSync } from "../project/sync";
 import { synthesizeScene, useSynthesis } from "../project/synthesis";
 import { useProjectStore } from "../project/store";
-import { SceneAlignmentModeSchema, type SceneAlignmentMode, type ScriptScene, type VoiceConfig } from "../types";
+import { SceneAlignmentModeSchema, type SceneAlignmentMode, type ScriptScene, type VoiceConfig, type VoiceEngine } from "../types";
 import { SyncBadge } from "./SyncBadge";
 import { Button, Field, INPUT_CLASS, NumberField, StatusText } from "./ui";
 
@@ -29,6 +29,12 @@ function Section({ title, children }: { readonly title: string; readonly childre
   );
 }
 
+/** Engines offered in the UI; "kokoro-local"/"custom-api" exist in the schema but are not built yet. */
+const TTS_ENGINES: ReadonlyArray<{ readonly id: VoiceEngine; readonly label: string }> = [
+  { id: "edge-tts", label: "Edge-TTS (tidak resmi)" },
+  { id: "azure-speech", label: "Azure Speech (resmi)" },
+];
+
 /** Shared voice controls for the project default and per-scene overrides. */
 export function VoiceFields({
   idPrefix,
@@ -41,12 +47,32 @@ export function VoiceFields({
   readonly onChange: (voice: VoiceConfig) => void;
   readonly disabled: boolean;
 }) {
-  const { voices, status } = useVoices();
+  const { voices, status } = useVoices(voice.engine);
   const sorted = sortVoices(voices);
   const known = sorted.some((v) => v.shortName === voice.voiceId);
+  const offlineHint =
+    voice.engine === "azure-speech" ? "Daftar suara Azure belum tersedia (atur kunci di Pengaturan)." : "Daftar suara terbatas (offline atau belum disetujui).";
   return (
-    <div className="grid grid-cols-[2fr_1fr_1fr] gap-3">
-      <Field id={`${idPrefix}-voice`} label="Suara" {...(status === "offline" && { hint: "Offline: daftar suara terbatas." })}>
+    <div className="grid grid-cols-[1.4fr_2fr_1fr_1fr] gap-3">
+      <Field id={`${idPrefix}-engine`} label="Engine">
+        <select
+          id={`${idPrefix}-engine`}
+          className={SELECT_CLASS}
+          value={voice.engine}
+          disabled={disabled}
+          onChange={(e) => {
+            const engine = TTS_ENGINES.find((option) => option.id === e.target.value);
+            if (engine) onChange({ ...voice, engine: engine.id });
+          }}
+        >
+          {TTS_ENGINES.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field id={`${idPrefix}-voice`} label="Suara" {...(status === "offline" && { hint: offlineHint })}>
         <select
           id={`${idPrefix}-voice`}
           className={SELECT_CLASS}

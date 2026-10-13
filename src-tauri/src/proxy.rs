@@ -157,7 +157,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "machine-specific: real encode"]
     async fn live_build_proxy() {
-        let detection = crate::ffmpeg::detect_encoder(None, |_| {}).await.expect("detect");
+        let detection = crate::ffmpeg::detect_encoder(None, crate::ffmpeg::Codec::H264, |_| {}).await.expect("detect");
         let encoder = detection.selected.expect("an H.264 encoder");
         let root = std::env::temp_dir().join(format!("script-studio-proxy-{}", uuid::Uuid::new_v4().simple()));
         std::fs::create_dir_all(&root).expect("dir");

@@ -19,6 +19,7 @@ export const AppErrorKindSchema = z.enum([
   "binaryNotFound",
   "process",
   "cancelled",
+  "consentRequired",
 ]);
 
 export const AppErrorSchema = z.object({
@@ -52,12 +53,18 @@ export const DependencyReportSchema = z.object({
   ffprobe: ToolStatusSchema,
 });
 
+export const CodecSchema = z.enum(["av1", "h264"]);
+
 export const VideoEncoderIdSchema = z.enum([
   "h264_nvenc",
   "h264_qsv",
   "h264_amf",
   "h264_videotoolbox",
   "libopenh264",
+  "av1_nvenc",
+  "av1_qsv",
+  "av1_amf",
+  "libsvtav1",
 ]);
 
 export const EncoderCandidateSchema = z.object({
@@ -71,6 +78,12 @@ export const EncoderCandidateSchema = z.object({
 export const EncoderDetectionSchema = z.object({
   selected: VideoEncoderIdSchema.nullable(),
   candidates: z.array(EncoderCandidateSchema),
+});
+
+/** AV1 is the default export (royalty-free, ADR D6); H.264 is the compatibility option. */
+export const EncoderReportSchema = z.object({
+  av1: EncoderDetectionSchema,
+  h264: EncoderDetectionSchema,
 });
 
 // ---------------------------------------------------------------------------
@@ -109,6 +122,16 @@ export const VoiceInfoSchema = z.object({
 });
 
 export const VoiceListSchema = z.array(VoiceInfoSchema);
+
+// ---------------------------------------------------------------------------
+// App settings (the Azure key never crosses IPC)
+// ---------------------------------------------------------------------------
+
+export const SettingsViewSchema = z.object({
+  edgeTtsConsent: z.boolean(),
+  azureRegion: z.string().nullable(),
+  azureKeyStored: z.boolean(),
+});
 
 // ---------------------------------------------------------------------------
 // Project & media
@@ -185,11 +208,14 @@ export type DependencyReport = DeepReadonly<z.infer<typeof DependencyReportSchem
 export type VideoEncoderId = z.infer<typeof VideoEncoderIdSchema>;
 export type EncoderCandidate = DeepReadonly<z.infer<typeof EncoderCandidateSchema>>;
 export type EncoderDetection = DeepReadonly<z.infer<typeof EncoderDetectionSchema>>;
+export type EncoderReport = DeepReadonly<z.infer<typeof EncoderReportSchema>>;
+export type Codec = z.infer<typeof CodecSchema>;
 export type TtsSynthesizeRequest = DeepReadonly<z.infer<typeof TtsSynthesizeRequestSchema>>;
 export type WordBoundary = DeepReadonly<z.infer<typeof WordBoundarySchema>>;
 export type TtsResult = DeepReadonly<z.infer<typeof TtsResultSchema>>;
 export type VoiceInfo = DeepReadonly<z.infer<typeof VoiceInfoSchema>>;
 export type JobEvent = DeepReadonly<z.infer<typeof JobEventSchema>>;
+export type SettingsView = DeepReadonly<z.infer<typeof SettingsViewSchema>>;
 export type PresetId = z.infer<typeof PresetIdSchema>;
 export type RenderProgress = DeepReadonly<z.infer<typeof RenderProgressSchema>>;
 export type OpenedProject = DeepReadonly<z.infer<typeof OpenedProjectSchema>>;

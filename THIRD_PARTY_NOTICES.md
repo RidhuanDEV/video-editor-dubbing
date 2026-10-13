@@ -27,8 +27,10 @@ It uses or bundles the third-party components below under their own licences.
   **HarfBuzz** (MIT), **OpenH264** (BSD-2-Clause), **libvpl** (MIT), **nv-codec-headers** (MIT)
   and **AMF** headers (MIT).
 - **Patents**: software licences do not grant patent rights for H.264/AAC. Cisco's OpenH264
-  patent coverage applies only to binaries built and distributed by Cisco. Seek legal advice
-  before public distribution.
+  patent coverage applies only to binaries built and distributed by Cisco. For this reason the
+  default export is **AV1 + Opus in WebM** (royalty-free formats, encoded with SVT-AV1 or the
+  GPU's AV1 encoder); H.264 + AAC in MP4 is an explicit opt-in for compatibility (ADR D6).
+  This is not legal advice.
 
 ## Fonts (bundled)
 
@@ -40,7 +42,7 @@ It uses or bundles the third-party components below under their own licences.
 | Package | Licence |
 | :-- | :-- |
 | react, react-dom | MIT |
-| @tauri-apps/api | Apache-2.0 OR MIT |
+| @tauri-apps/api, @tauri-apps/plugin-updater, @tauri-apps/plugin-process | Apache-2.0 OR MIT |
 | zod | MIT |
 | zustand | MIT |
 | lucide-react | ISC |
@@ -48,15 +50,20 @@ It uses or bundles the third-party components below under their own licences.
 
 ## Rust crates (compiled into the app)
 
-Direct dependencies: tauri, tauri-plugin-dialog (Apache-2.0 OR MIT), tokio, serde, serde_json,
-tokio-tungstenite, reqwest, futures-util, async-trait, sha2, hex, uuid, chrono, httpdate,
-thiserror, tracing, tracing-subscriber, tracing-appender (MIT and/or Apache-2.0).
+Direct dependencies: tauri, tauri-plugin-dialog, tauri-plugin-updater, tauri-plugin-process
+(Apache-2.0 OR MIT), tokio, serde, serde_json, tokio-tungstenite, reqwest, futures-util,
+async-trait, sha2, hex, uuid, chrono, httpdate, thiserror, tracing, tracing-subscriber,
+tracing-appender, keyring (MIT and/or Apache-2.0).
 The full transitive list with licence texts is generated per release with
 [`cargo-about`](https://github.com/EmbarkStudios/cargo-about) and attached to the release.
 
-## Online service
+## Online services
 
-Narration uses Microsoft Edge's read-aloud service through an **unofficial** client (Edge-TTS
-protocol). It is not affiliated with or endorsed by Microsoft, may change or be blocked at any
-time, and its terms for commercial use are unclear. Use an official engine (e.g. Azure Speech)
-for commercial work.
+- **Edge-TTS (opt-in)**: narration can use Microsoft Edge's read-aloud service through an
+  **unofficial** client. It is used only after the user accepts a notice in the app (revocable
+  in Settings). It is not affiliated with or endorsed by Microsoft, may change or be blocked at
+  any time, and its terms for commercial use are unclear.
+- **Azure Speech (official)**: uses the user's own Azure key and region; the key is stored in the
+  operating system keychain. Usage is billed and governed by the user's Azure terms. Recommended
+  for commercial work.
+- **Updates**: at startup the app checks this repository's GitHub Releases for a signed update.

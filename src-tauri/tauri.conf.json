@@ -49,5 +49,16 @@
       "../NOTICE": "licenses/NOTICE",
       "../THIRD_PARTY_NOTICES.md": "licenses/THIRD_PARTY_NOTICES.md"
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDcxNENDRTY3OUMzMTdGMDQKUldRRWZ6R2NaODVNY1RUUitjZFY0citUa0Jsemk5N1lDTUdhK1JySTN4LzBMaHVaVytRaWxTcTAK",
+      "endpoints": [
+        "https://github.com/RidhuanDEV/video-editor-dubbing/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }
