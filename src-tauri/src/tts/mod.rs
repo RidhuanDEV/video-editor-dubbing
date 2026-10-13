@@ -4,7 +4,7 @@
 mod cache;
 mod edge;
 
-pub use cache::{synthesize_cached, TtsResult};
+pub use cache::{read_word_boundaries, synthesize_cached, TtsResult};
 pub use edge::EdgeTtsProvider;
 
 use async_trait::async_trait;

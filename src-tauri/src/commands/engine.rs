@@ -1,5 +1,6 @@
 //! Engine commands: FFmpeg diagnostics and TTS.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use tauri::{AppHandle, Manager, State};
@@ -8,7 +9,7 @@ use crate::error::{AppError, ErrorKind};
 use crate::ffmpeg::{self, DependencyReport, EncoderDetection};
 use crate::jobs::{validate_job_id, Job, JobKind};
 use crate::project::TTS_CACHE_DIR;
-use crate::tts::{self, TtsRequest, TtsResult, VoiceInfo};
+use crate::tts::{self, TtsRequest, TtsResult, VoiceInfo, WordBoundary};
 
 use super::AppState;
 
@@ -71,4 +72,16 @@ pub async fn tts_synthesize(
 #[tauri::command]
 pub async fn tts_list_voices(state: State<'_, AppState>) -> Result<Vec<VoiceInfo>, AppError> {
     Ok(state.tts.list_voices().await?)
+}
+
+const MAX_BOUNDARY_LOOKUPS: usize = 5_000;
+
+/// Word timings for subtitles, read from the open project's TTS cache.
+#[tauri::command]
+pub async fn tts_word_boundaries(state: State<'_, AppState>, sha256s: Vec<String>) -> Result<HashMap<String, Vec<WordBoundary>>, AppError> {
+    if sha256s.len() > MAX_BOUNDARY_LOOKUPS {
+        return Err(AppError::new(ErrorKind::InvalidRequest, "terlalu banyak entri"));
+    }
+    let root = state.session.require_root()?;
+    Ok(tts::read_word_boundaries(&root.join(TTS_CACHE_DIR), &sha256s).await)
 }

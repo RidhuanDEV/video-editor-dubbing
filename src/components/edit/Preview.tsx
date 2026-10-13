@@ -4,14 +4,17 @@
  * approximation; the export (FFmpeg) is the reference (01 §5).
  */
 import { Loader2, Pause, Play, SkipBack, SkipForward, StepBack, StepForward } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { formatTimecode, projectFileUrl } from "../../lib/format";
+import { activeEffects, contentRect } from "../../project/effects";
 import { useEditor } from "../../project/editor";
 import { requestProxyRebuild, useProxies } from "../../project/proxies";
 import { useSessionUi } from "../../project/session";
+import { cueAt, type Cue } from "../../project/subtitles";
 import { audibleTracks, segmentAt, videoPositionAt, type TimelineLayout } from "../../project/timeline";
-import type { AudioTrackConfig, MediaAsset, ProjectManifest } from "../../types";
+import type { AudioTrackConfig, BlurEffect, MediaAsset, ProjectManifest, SceneEffect, ZoomEffect } from "../../types";
 import { IconButton, StatusText } from "../ui";
+import { BlurOverlays, ScreenOverlays, SubtitleOverlay, zoomStyle } from "./EffectLayers";
 
 /** Re-seek a playing element only past this drift; smaller corrections cause audible stutter. */
 const PLAYING_DRIFT_S = 0.25;
@@ -76,7 +79,26 @@ function BgmPlayer({ root, track, asset, playheadMs, playing, audible, ducked }:
   return src ? <audio ref={ref} src={src} preload="auto" /> : null;
 }
 
-export function Preview({ manifest, root, layout }: { readonly manifest: ProjectManifest; readonly root: string; readonly layout: TimelineLayout }) {
+interface PreviewProps {
+  readonly manifest: ProjectManifest;
+  readonly root: string;
+  readonly layout: TimelineLayout;
+  readonly cues: ReadonlyArray<Cue>;
+  /** Efek page: no zoom transform, so gizmos are drawn on the untouched frame. */
+  readonly editMode?: boolean;
+  /** Interactive overlay positioned over the canvas box. */
+  readonly gizmo?: ReactNode;
+}
+
+function isZoom(effect: SceneEffect): effect is ZoomEffect {
+  return effect.type === "zoom";
+}
+
+function isBlur(effect: SceneEffect): effect is BlurEffect {
+  return effect.type === "blur";
+}
+
+export function Preview({ manifest, root, layout, cues, editMode = false, gizmo }: PreviewProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const narrationRef = useRef<HTMLAudioElement>(null);
   const playheadMs = useEditor((s) => s.playheadMs);
@@ -122,25 +144,41 @@ export function Preview({ manifest, root, layout }: { readonly manifest: Project
   })();
 
   const { width, height, background, fit } = manifest.canvas;
+  const sceneOffsetMs = narrationSegment ? playheadMs - narrationSegment.startMs : 0;
+  const effects = scene ? activeEffects(scene.effects, sceneOffsetMs) : [];
+  const elapsedOf = (effect: SceneEffect): number => sceneOffsetMs - effect.startOffsetMs;
+  const sourceW = asset?.width ?? width;
+  const sourceH = asset?.height ?? height;
+  const content = contentRect(manifest.canvas, sourceW, sourceH, fit);
+  const zoom = effects.find(isZoom);
+  const contentStyle = editMode ? undefined : zoomStyle(zoom, zoom ? elapsedOf(zoom) : 0, content);
+  const subtitle = manifest.subtitleSettings.enabled ? cueAt(cues, playheadMs) : null;
   return (
     <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 bg-app p-4">
       <div className="relative flex max-h-full w-full min-h-0 flex-1 items-center justify-center">
         <div
           className="relative max-h-full max-w-full overflow-hidden rounded-sm border border-line-subtle"
-          style={{ aspectRatio: `${width} / ${height}`, background, height: "100%" }}
+          style={{ aspectRatio: `${width} / ${height}`, background, height: "100%", containerType: "size" }}
         >
-          {videoSrc && (
-            <video
-              ref={videoRef}
-              src={videoSrc}
-              muted
-              playsInline
-              preload="auto"
-              className="absolute inset-0 h-full w-full"
-              style={{ objectFit: fit }}
-              onError={() => asset && requestProxyRebuild(asset.id)}
-            />
-          )}
+          <div className="absolute inset-0 overflow-hidden">
+            <div className="absolute inset-0 will-change-transform" style={contentStyle}>
+              {videoSrc && (
+                <video
+                  ref={videoRef}
+                  src={videoSrc}
+                  muted
+                  playsInline
+                  preload="auto"
+                  className="absolute inset-0 h-full w-full"
+                  style={{ objectFit: fit }}
+                  onError={() => asset && requestProxyRebuild(asset.id)}
+                />
+              )}
+              <BlurOverlays effects={effects.filter(isBlur)} content={content} sourceW={sourceW} sourceH={sourceH} canvas={manifest.canvas} />
+            </div>
+            <ScreenOverlays effects={effects} elapsedOf={elapsedOf} content={content} canvas={manifest.canvas} />
+            {subtitle && <SubtitleOverlay cue={subtitle.cue} activeWord={subtitle.activeWord} settings={manifest.subtitleSettings} canvas={manifest.canvas} />}
+          </div>
           {overlay && (
             <div className="absolute inset-0 flex items-center justify-center bg-timeline/80 p-6 text-center text-[13px] text-fg">
               {proxyStatus?.state === "building" ? (
@@ -157,6 +195,7 @@ export function Preview({ manifest, root, layout }: { readonly manifest: Project
           {position?.frozen && !overlay && (
             <span className="absolute top-2 left-2 rounded-sm bg-black/60 px-1.5 py-0.5 text-[12px] text-white">Freeze</span>
           )}
+          {gizmo}
         </div>
       </div>
 

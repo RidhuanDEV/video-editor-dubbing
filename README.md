@@ -3,9 +3,9 @@
 Script-driven video editor & dubbing studio: Tauri 2 (Rust) + React 19 + TypeScript strict + Tailwind CSS v4.
 Specs live in `../../docs/desktop-editor-prd/` (PRD 00–09). Licence: Apache-2.0. FFmpeg is an LGPL sidecar (ADR D3).
 
-Status: **Phase 3** — preview proxies (540p H.264 / AAC, built in the background), proxy-based preview with
-freeze-frame, multi-track timeline (magnetic scene track, trim/split/delete, snapping, mute/solo/lock, BGM).
-Phases 0–2 (engine, project format, media pool, script panel, undo/redo, autosave) are complete.
+Status: **Phase 4** — effects (zoom/spotlight, privacy blur, step badges) created by dragging on the
+preview, karaoke subtitles from TTS WordBoundary (ASS with active-word highlight, SRT), audio page
+(mix, loudness target, scene gap, BGM ducking). Phases 0–3 are complete. Next: Phase 5 (export).
 
 ## Prerequisites
 
@@ -36,11 +36,13 @@ src/
     theme.ts    ThemePreference / resolveTheme (PRD 08 §4)
   project/      manifest (create/load/serialize), commands (undo/redo), store (Zustand),
                 session (open/save/autosave/recovery), chunk, sync, synthesis,
-                timeline (layout/snap), editor (playhead/selection), proxies (background queue)
+                timeline (layout/snap), editor (playhead/selection), proxies (background queue),
+                effects (geometry/easing), subtitles (align/chunk/ASS/SRT), subtitleData
   lib/ipc.ts    Typed invoke wrapper: every response/rejection validated with Zod
   lib/theme.ts  Theme hook (system/light/dark, Ctrl/Cmd+Shift+L, native title bar sync)
   styles/       tokens.css (PRD 08 tokens) + index.css (Tailwind v4 @theme inline)
-  components/   AppShell, StartScreen, MediaPage, ScriptPage + SceneEditor, EngineView, Dialog, ui
+  components/   AppShell, StartScreen, MediaPage, ScriptPage + SceneEditor, AudioPage, EngineView, Dialog, ui
+    edit/       EditPage (Edit + Efek), Preview, EffectLayers, EffectGizmo, EffectsPanel, Timeline
 src-tauri/src/
   ffmpeg/       resolver (custom → bundled → PATH), process (array args, timeout, kill-on-drop),
                 probe (version + LGPL/GPL/nonfree detection), encoder (real test-encode chain)

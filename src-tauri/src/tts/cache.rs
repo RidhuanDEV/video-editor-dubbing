@@ -2,6 +2,7 @@
 //! `<sha>.mp3` + `<sha>.json` (duration, word boundaries). Writes are atomic (temp + rename),
 //! so a crash never leaves a half-written entry that would be served later.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -93,6 +94,27 @@ pub async fn synthesize_cached(
     })
 }
 
+/// Word timings of cached entries, keyed by SHA-256. Unknown or unreadable entries are omitted
+/// (the UI then falls back to proportional subtitle timing, 04 §3.3).
+pub async fn read_word_boundaries(cache_dir: &Path, sha256s: &[String]) -> HashMap<String, Vec<WordBoundary>> {
+    let mut result = HashMap::with_capacity(sha256s.len());
+    for sha in sha256s {
+        if !is_sha256(sha) {
+            continue;
+        }
+        let Ok(bytes) = tokio::fs::read(cache_dir.join(format!("{sha}.json"))).await else { continue };
+        if let Ok(meta) = serde_json::from_slice::<CacheMeta>(&bytes) {
+            result.insert(sha.clone(), meta.word_boundaries);
+        }
+    }
+    result
+}
+
+/// Lowercase hex only: the value becomes a file name.
+pub fn is_sha256(value: &str) -> bool {
+    value.len() == 64 && value.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
 async fn read_meta(audio_path: &Path, meta_path: &Path) -> Option<CacheMeta> {
     if !tokio::fs::try_exists(audio_path).await.unwrap_or(false) {
         return None;
@@ -158,6 +180,24 @@ mod tests {
             pitch: "+0Hz".into(),
             volume: "+0%".into(),
         }
+    }
+
+    #[test]
+    fn sha_validation_blocks_paths() {
+        assert!(is_sha256(&"a".repeat(64)));
+        assert!(!is_sha256(&format!("../{}", "a".repeat(61))));
+        assert!(!is_sha256(&"A".repeat(64)));
+    }
+
+    #[tokio::test]
+    async fn reads_boundaries_of_cached_entries() {
+        let dir = std::env::temp_dir().join(format!("script-studio-wb-{}", uuid::Uuid::new_v4().simple()));
+        let provider = FakeProvider { calls: AtomicUsize::new(0) };
+        let first = synthesize_cached(&provider, &request("Halo"), &dir, "job".into()).await.expect("synth");
+        let map = read_word_boundaries(&dir, &[first.sha256.clone(), "f".repeat(64), "bad".into()]).await;
+        assert_eq!(map.len(), 1);
+        assert_eq!(map.get(&first.sha256).map(Vec::len), Some(1));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

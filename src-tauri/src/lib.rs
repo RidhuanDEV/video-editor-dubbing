@@ -32,6 +32,7 @@ pub fn run() {
             commands::engine::detect_encoder,
             commands::engine::tts_synthesize,
             commands::engine::tts_list_voices,
+            commands::engine::tts_word_boundaries,
             commands::project::project_create,
             commands::project::project_open,
             commands::project::project_save,

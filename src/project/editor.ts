@@ -1,7 +1,11 @@
 /** Edit-page UI state: playhead, transport, selection and zoom. Never written to the manifest. */
 import { create } from "zustand";
 
-export type Selection = { readonly type: "scene"; readonly id: string } | { readonly type: "bgm"; readonly id: string } | null;
+export type Selection =
+  | { readonly type: "scene"; readonly id: string }
+  | { readonly type: "bgm"; readonly id: string }
+  | { readonly type: "effect"; readonly sceneId: string; readonly id: string }
+  | null;
 
 export const MIN_PX_PER_SEC = 10;
 export const MAX_PX_PER_SEC = 400;

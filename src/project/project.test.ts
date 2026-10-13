@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import type { ProjectManifest, ScriptScene } from "../types";
+import type { MediaAsset, ProjectManifest, ScriptScene } from "../types";
 import FIXTURE from "./fixtures/project-1.0.0.json?raw";
 import { autoChunk, splitSentences, titleFromNarration } from "./chunk";
 import { buildScenes, effectiveVoice, insertScenes, moveScene, removeAsset, setDefaultVoice, updateScene } from "./commands";
@@ -70,7 +70,8 @@ describe("commands", () => {
   });
 
   it("refuses to remove an asset used by a scene", () => {
-    const manifest = { ...manifestWith([scene("a")]), assets: [{ id: "asset", kind: "video" as const, filePath: "x.mp4" }] };
+    const asset: MediaAsset = { id: "asset", kind: "video", filePath: "x.mp4" };
+    const manifest = { ...manifestWith([scene("a")]), assets: [asset] };
     expect(removeAsset(manifest, "asset")).toBeNull();
   });
 
@@ -181,7 +182,7 @@ describe("sceneSync", () => {
 
 describe("buildScenes", () => {
   it("splits the clip evenly and keeps every trim valid", () => {
-    const asset = { id: "v", kind: "video" as const, filePath: "v.mp4", durationMs: 10_000 };
+    const asset: MediaAsset = { id: "v", kind: "video", filePath: "v.mp4", durationMs: 10_000 };
     const scenes = buildScenes(asset, ["a", "b", "c"], (n) => n.toUpperCase());
     expect(scenes.map((s) => [s.videoTrimStartMs, s.videoTrimEndMs, s.title])).toEqual([
       [0, 3333, "A"],

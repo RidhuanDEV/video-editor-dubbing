@@ -309,3 +309,49 @@ export function removeBgmTrack(manifest: ProjectManifest, trackId: string): Comm
     revert: (m) => ({ ...m, bgmTracks: [...m.bgmTracks.slice(0, index), track, ...m.bgmTracks.slice(index)] }),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Effects (Phase 4)
+// ---------------------------------------------------------------------------
+
+type Effect = ScriptScene["effects"][number];
+
+function withEffects(manifest: ProjectManifest, sceneId: string, label: string, map: (effects: ReadonlyArray<Effect>) => ReadonlyArray<Effect>, coalesceKey?: string): Command | null {
+  const scene = manifest.scenes.find((s) => s.id === sceneId);
+  if (!scene) return null;
+  const command = updateScene(manifest, sceneId, { effects: map(scene.effects) }, coalesceKey);
+  return command && { ...command, label };
+}
+
+export function addEffect(manifest: ProjectManifest, sceneId: string, effect: Effect): Command | null {
+  return withEffects(manifest, sceneId, "Tambah efek", (effects) => [...effects, effect]);
+}
+
+/** Replaces one effect. Gizmo drags pass a coalesce key so a whole drag is one undo step. */
+export function replaceEffect(manifest: ProjectManifest, sceneId: string, effect: Effect, coalesceKey?: string): Command | null {
+  return withEffects(manifest, sceneId, "Ubah efek", (effects) => effects.map((e) => (e.id === effect.id ? effect : e)), coalesceKey);
+}
+
+export function removeEffect(manifest: ProjectManifest, sceneId: string, effectId: string): Command | null {
+  return withEffects(manifest, sceneId, "Hapus efek", (effects) => effects.filter((e) => e.id !== effectId));
+}
+
+export function setSubtitleSettings(manifest: ProjectManifest, settings: ProjectManifest["subtitleSettings"], coalesceKey: string): Command {
+  const before = manifest.subtitleSettings;
+  return {
+    label: "Ubah gaya subtitle",
+    coalesceKey,
+    apply: (m) => ({ ...m, subtitleSettings: settings }),
+    revert: (m) => ({ ...m, subtitleSettings: before }),
+  };
+}
+
+export function setAudioMix(manifest: ProjectManifest, patch: Partial<Pick<ProjectManifest, "loudness" | "sceneGapMs">>, coalesceKey: string): Command {
+  const before = { loudness: manifest.loudness, sceneGapMs: manifest.sceneGapMs };
+  return {
+    label: "Ubah pengaturan audio",
+    coalesceKey,
+    apply: (m) => ({ ...m, ...patch }),
+    revert: (m) => ({ ...m, ...before }),
+  };
+}

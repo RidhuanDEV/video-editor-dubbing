@@ -2,6 +2,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef, useState } from "react";
 import { AppShell, type ProjectHeader, type ViewId } from "./components/AppShell";
+import { AudioPage } from "./components/AudioPage";
 import { Dialog } from "./components/Dialog";
 import { EditPage } from "./components/edit/EditPage";
 import { EngineView } from "./components/EngineView";
@@ -124,7 +125,8 @@ export function App() {
     if (!project) return <StartScreen />;
     if (view === "media") return <MediaPage />;
     if (view === "script") return <ScriptPage onGoToMedia={() => setView("media")} />;
-    if (view === "edit") return <EditPage />;
+    if (view === "edit" || view === "effects") return <EditPage mode={view === "edit" ? "edit" : "effects"} onOpenEffects={() => setView("effects")} />;
+    if (view === "audio") return <AudioPage />;
     return <WorkspacePage page={view} />;
   })();
 

@@ -21,10 +21,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { formatTimecode } from "../../lib/format";
-import { removeBgmTrack, removeScene, setTrackState, splitScene, trimSceneClip, updateBgmTrack } from "../../project/commands";
+import { removeBgmTrack, removeEffect, removeScene, setTrackState, splitScene, trimSceneClip, updateBgmTrack } from "../../project/commands";
+import { EFFECT_LABEL } from "../../project/effects";
 import { MAX_PX_PER_SEC, MIN_PX_PER_SEC, useEditor } from "../../project/editor";
 import { useProjectStore } from "../../project/store";
 import { isTrackLocked, layoutTimeline, snapCandidates, snapMs, splitPointAt, type TimelineLayout } from "../../project/timeline";
+import type { Cue } from "../../project/subtitles";
 import type { ProjectManifest, TrackKind } from "../../types";
 import { IconButton } from "../ui";
 
@@ -168,7 +170,7 @@ function TrackHeader({ manifest, row, extra }: { readonly manifest: ProjectManif
 
 const HANDLE = "absolute top-0 bottom-0 z-10 w-1.5 cursor-ew-resize bg-transparent hover:bg-accent/60";
 
-export function Timeline({ manifest, onAddBgm }: { readonly manifest: ProjectManifest; readonly onAddBgm: () => void }) {
+export function Timeline({ manifest, cues, onAddBgm }: { readonly manifest: ProjectManifest; readonly cues: ReadonlyArray<Cue>; readonly onAddBgm: () => void }) {
   const execute = useProjectStore((s) => s.execute);
   const readOnly = useProjectStore((s) => s.project?.readOnly ?? true);
   const pxPerSec = useEditor((s) => s.pxPerSec);
@@ -275,6 +277,7 @@ export function Timeline({ manifest, onAddBgm }: { readonly manifest: ProjectMan
   const deleteSelected = (): void => {
     if (selection?.type === "scene" && !videoLocked) execute(removeScene(manifest, selection.id));
     if (selection?.type === "bgm" && !bgmLocked) execute(removeBgmTrack(manifest, selection.id));
+    if (selection?.type === "effect" && !isTrackLocked(manifest.tracks, "effects") && !readOnly) execute(removeEffect(manifest, selection.sceneId, selection.id));
     useEditor.getState().select(null);
   };
 
@@ -416,15 +419,23 @@ export function Timeline({ manifest, onAddBgm }: { readonly manifest: ProjectMan
 
                 {row.kind === "effects" &&
                   layout.segments.flatMap((segment) =>
-                    segment.scene.effects.map((effect) => (
-                      <div
-                        key={effect.id}
-                        className="absolute top-1 bottom-1 truncate rounded-sm border-t-2 border-track-effects bg-track-effects/20 px-1.5 text-[11px] leading-[28px]"
-                        style={{ left: (segment.startMs + effect.startOffsetMs) * pxPerMs, width: effect.durationMs * pxPerMs }}
-                      >
-                        {effect.type}
-                      </div>
-                    )),
+                    segment.scene.effects.map((effect) => {
+                      const selected = selection?.type === "effect" && selection.id === effect.id;
+                      return (
+                        <button
+                          type="button"
+                          key={effect.id}
+                          className={`absolute top-1 bottom-1 truncate rounded-sm border-t-2 border-track-effects bg-track-effects/20 px-1.5 text-left text-[11px] leading-[28px] ${
+                            selected ? "outline-2 outline-accent" : ""
+                          }`}
+                          style={{ left: (segment.startMs + effect.startOffsetMs) * pxPerMs, width: effect.durationMs * pxPerMs }}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={() => useEditor.getState().select({ type: "effect", sceneId: segment.scene.id, id: effect.id })}
+                        >
+                          {EFFECT_LABEL[effect.type]}
+                        </button>
+                      );
+                    }),
                   )}
 
                 {row.kind === "bgm" &&
@@ -466,9 +477,21 @@ export function Timeline({ manifest, onAddBgm }: { readonly manifest: ProjectMan
                     );
                   })}
 
-                {row.kind === "subtitle" && layout.segments.length > 0 && (
-                  <span className="pointer-events-none absolute top-0 left-2 text-[11px] leading-[40px] text-fg-muted">Subtitle dibangun di Fase 4</span>
-                )}
+                {row.kind === "subtitle" &&
+                  manifest.subtitleSettings.enabled &&
+                  !drag &&
+                  cues.map((cue) => (
+                    <div
+                      key={cue.id}
+                      className={`pointer-events-none absolute top-1 bottom-1 truncate rounded-sm border-t-2 border-track-subtitle bg-track-subtitle/20 px-1 text-[11px] leading-[28px] ${
+                        cue.precise ? "" : "border-dashed"
+                      }`}
+                      style={{ left: cue.startMs * pxPerMs, width: (cue.endMs - cue.startMs) * pxPerMs }}
+                      title={cue.precise ? cue.text : `${cue.text} (timing perkiraan)`}
+                    >
+                      {cue.text}
+                    </div>
+                  ))}
               </div>
             ))}
 

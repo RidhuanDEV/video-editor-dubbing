@@ -1,11 +1,9 @@
 /** Pages not built yet: each states which phase delivers it. */
 import { PAGES, type PageId } from "./AppShell";
 
-export type PlaceholderPageId = Exclude<PageId, "media" | "script" | "edit">;
+export type PlaceholderPageId = Exclude<PageId, "media" | "script" | "edit" | "effects" | "audio">;
 
 const PLANNED_PHASE: Readonly<Record<PlaceholderPageId, string>> = {
-  effects: "Zoom, blur, dan subtitle dibangun di Fase 4.",
-  audio: "Mixer, ducking, dan loudness dibangun di Fase 4–5.",
   deliver: "Preset ekspor dan antrean render dibangun di Fase 5.",
 };
 

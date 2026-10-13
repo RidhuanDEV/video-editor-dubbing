@@ -1,16 +1,23 @@
-/** Edit page (03 §5.1 default page): preview, inspector, multi-track timeline, shortcuts. */
+/**
+ * Edit page (03 §5.1 default page) and Efek page: same preview + timeline layout. In "effects"
+ * mode the preview shows the unzoomed frame with the effect gizmo and the effects panel.
+ */
 import { Trash2 } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
 import { notify } from "../../lib/notices";
-import { addBgmTrack, removeBgmTrack, removeScene, updateBgmTrack } from "../../project/commands";
+import { addBgmTrack, removeBgmTrack, removeEffect, removeScene, updateBgmTrack } from "../../project/commands";
 import { useEditor } from "../../project/editor";
 import { fileNameOf } from "../../project/manifest";
 import { useProjectStore } from "../../project/store";
-import { isTrackLocked, layoutTimeline } from "../../project/timeline";
+import { useCues } from "../../project/subtitleData";
+import { contentRect } from "../../project/effects";
+import { EMPTY_LAYOUT, isTrackLocked, layoutTimeline, segmentAt } from "../../project/timeline";
 import type { AudioTrackConfig, ProjectManifest } from "../../types";
 import { Dialog } from "../Dialog";
 import { SceneEditor } from "../SceneEditor";
 import { Button, Field, INPUT_CLASS } from "../ui";
+import { EffectGizmo, type EffectTool } from "./EffectGizmo";
+import { EffectsPanel } from "./EffectsPanel";
 import { Preview } from "./Preview";
 import { splitAtPlayhead, Timeline } from "./Timeline";
 
@@ -69,6 +76,7 @@ function useEditShortcuts(manifest: ProjectManifest | null, durationMs: number):
           const store = useProjectStore.getState();
           if (selection?.type === "scene" && !isTrackLocked(manifest.tracks, "video")) store.execute(removeScene(manifest, selection.id));
           else if (selection?.type === "bgm" && !isTrackLocked(manifest.tracks, "bgm")) store.execute(removeBgmTrack(manifest, selection.id));
+          else if (selection?.type === "effect" && !isTrackLocked(manifest.tracks, "effects")) store.execute(removeEffect(manifest, selection.sceneId, selection.id));
           else return;
           editor.select(null);
           break;
@@ -83,7 +91,7 @@ function useEditShortcuts(manifest: ProjectManifest | null, durationMs: number):
   }, [manifest, durationMs]);
 }
 
-function BgmInspector({ manifest, track }: { readonly manifest: ProjectManifest; readonly track: AudioTrackConfig }) {
+export function BgmInspector({ manifest, track }: { readonly manifest: ProjectManifest; readonly track: AudioTrackConfig }) {
   const ids = { volume: useId(), duck: useId() };
   const execute = useProjectStore((s) => s.execute);
   const readOnly = useProjectStore((s) => s.project?.readOnly ?? true);
@@ -146,18 +154,38 @@ function BgmInspector({ manifest, track }: { readonly manifest: ProjectManifest;
   );
 }
 
-export function EditPage() {
+export function EditPage({ mode, onOpenEffects }: { readonly mode: "edit" | "effects"; readonly onOpenEffects: () => void }) {
   const assetFieldId = useId();
+  const [tool, setTool] = useState<EffectTool>("select");
   const project = useProjectStore((s) => s.project);
   const execute = useProjectStore((s) => s.execute);
   const selection = useEditor((s) => s.selection);
   const [bgmDialog, setBgmDialog] = useState(false);
   const [bgmAssetId, setBgmAssetId] = useState("");
   const manifest = project?.manifest;
-  const layout = useMemo(() => (manifest ? layoutTimeline(manifest) : null), [manifest]);
-  useEditShortcuts(manifest ?? null, layout?.durationMs ?? 0);
+  const layout = useMemo(() => (manifest ? layoutTimeline(manifest) : EMPTY_LAYOUT), [manifest]);
+  const cues = useCues(layout);
+  // Index selector: re-renders when the scene under the playhead changes, not every frame.
+  const segmentIndex = useEditor((s) => segmentAt(layout, s.playheadMs)?.index ?? -1);
+  useEditShortcuts(manifest ?? null, layout.durationMs);
 
-  if (!project || !manifest || !layout) return null;
+  if (!project || !manifest) return null;
+  const segment = layout.segments[segmentIndex] ?? null;
+  const clip = segment ? manifest.assets.find((a) => a.id === segment.scene.videoClipId) : undefined;
+  const sourceW = clip?.width ?? manifest.canvas.width;
+  const sourceH = clip?.height ?? manifest.canvas.height;
+  const gizmo =
+    mode === "effects" ? (
+      <EffectGizmo
+        manifest={manifest}
+        segment={segment}
+        tool={tool}
+        onToolDone={() => setTool("select")}
+        content={contentRect(manifest.canvas, sourceW, sourceH, manifest.canvas.fit)}
+        sourceW={sourceW}
+        sourceH={sourceH}
+      />
+    ) : undefined;
   const audioAssets = manifest.assets.filter((a) => a.kind === "audio" && a.durationMs !== undefined);
   const selectedScene = selection?.type === "scene" ? manifest.scenes.find((s) => s.id === selection.id) : undefined;
   const selectedBgm = selection?.type === "bgm" ? manifest.bgmTracks.find((t) => t.id === selection.id) : undefined;
@@ -181,11 +209,18 @@ export function EditPage() {
   return (
     <div className="grid h-full grid-cols-[1fr_360px] grid-rows-[minmax(0,1fr)_260px] gap-px bg-line-subtle">
       <section className="min-h-0 bg-app" aria-label="Preview">
-        <Preview manifest={manifest} root={project.root} layout={layout} />
+        <Preview manifest={manifest} root={project.root} layout={layout} cues={cues} editMode={mode === "effects"} gizmo={gizmo} />
       </section>
 
       <aside className="min-h-0 overflow-auto bg-panel" aria-label="Inspector">
-        {selectedScene ? (
+        {mode === "effects" ? (
+          <EffectsPanel manifest={manifest} segment={segment} tool={tool} onTool={setTool} />
+        ) : selection?.type === "effect" ? (
+          <div className="space-y-3 p-4 text-[13px]">
+            <p className="text-fg-2">Efek diedit di halaman Efek, lengkap dengan gizmo di preview.</p>
+            <Button onClick={onOpenEffects}>Buka halaman Efek</Button>
+          </div>
+        ) : selectedScene ? (
           <SceneEditor key={selectedScene.id} scene={selectedScene} />
         ) : selectedBgm ? (
           <BgmInspector manifest={manifest} track={selectedBgm} />
@@ -195,7 +230,7 @@ export function EditPage() {
       </aside>
 
       <section className="col-span-2 min-h-0" aria-label="Timeline">
-        <Timeline manifest={manifest} onAddBgm={openBgmDialog} />
+        <Timeline manifest={manifest} cues={cues} onAddBgm={openBgmDialog} />
       </section>
 
       <Dialog

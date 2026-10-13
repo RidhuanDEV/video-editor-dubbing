@@ -13,6 +13,7 @@ import {
   RelinkCandidateSchema,
   TtsResultSchema,
   VoiceListSchema,
+  WordBoundarySchema,
   type AppError,
   type DependencyReport,
   type EncoderDetection,
@@ -22,6 +23,7 @@ import {
   type TtsResult,
   type TtsSynthesizeRequest,
   type VoiceInfo,
+  type WordBoundary,
 } from "../types";
 
 export type IpcResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: AppError };
@@ -132,4 +134,8 @@ export function mediaBuildProxy(
   kind: "video" | "audio",
 ): Promise<IpcResult<string>> {
   return call("media_build_proxy", z.string().min(1), { jobId, assetId, filePath, durationMs, kind });
+}
+
+export function ttsWordBoundaries(sha256s: ReadonlyArray<string>): Promise<IpcResult<Readonly<Record<string, ReadonlyArray<WordBoundary>>>>> {
+  return call("tts_word_boundaries", z.record(z.string(), z.array(WordBoundarySchema)), { sha256s });
 }
